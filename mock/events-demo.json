@@ -1,0 +1,1106 @@
+[
+  {
+    "type": "case",
+    "id": "case-20240603-coffee",
+    "input": "网传喝咖啡会致癌，还说专家已经证实了，每天一杯风险增加 30%，这是真的吗？",
+    "delayMs": 0
+  },
+  {
+    "type": "stage",
+    "stage": "claims",
+    "status": "start",
+    "message": "正在拆解消息中的可核查疑点",
+    "delayMs": 300
+  },
+  {
+    "type": "claims",
+    "claims": [
+      {
+        "id": "c1",
+        "text": "喝咖啡会致癌。",
+        "kind": "causal"
+      },
+      {
+        "id": "c2",
+        "text": "专家已经证实了这一结论。",
+        "kind": "person"
+      },
+      {
+        "id": "c3",
+        "text": "每天喝一杯咖啡，患癌风险会增加 30%。",
+        "kind": "number"
+      }
+    ],
+    "delayMs": 1100
+  },
+  {
+    "type": "stage",
+    "stage": "claims",
+    "status": "done",
+    "message": "拆出 3 个疑点",
+    "delayMs": 400
+  },
+  {
+    "type": "stage",
+    "stage": "search",
+    "status": "start",
+    "message": "围绕疑点进行正反搜证",
+    "delayMs": 400
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_paper_01",
+      "claimId": "c1",
+      "url": "https://www.cn-health-research.org.cn/article/2024/coffee-colorectal-cohort.html",
+      "site": "中国营养与肿瘤研究协作组",
+      "title": "咖啡摄入与消化道肿瘤风险的队列研究：一项多中心随访分析",
+      "snippet": "研究观察到咖啡摄入量与部分消化道肿瘤风险存在弱相关性，作者强调相关不等于因果，仍需机制研究验证。",
+      "publishedAt": "2024-03-12T02:00:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 致癌 研究 队列",
+      "stance": "irrelevant",
+      "tier": "official",
+      "groupId": "g2",
+      "isOrigin": true
+    },
+    "delayMs": 700
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_media_02",
+      "claimId": "c1",
+      "url": "https://www.jksb.com.cn/news/2024-04/18/content_228731.html",
+      "site": "健康时报网",
+      "title": "新研究发现：常喝咖啡与消化道肿瘤风险相关",
+      "snippet": "一项覆盖 12 万人的队列研究提示，每天饮用咖啡者消化道肿瘤发生率略高，但研究者提醒相关性有限。",
+      "publishedAt": "2024-04-18T01:30:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 癌症 最新研究",
+      "stance": "support",
+      "tier": "media",
+      "groupId": "g2",
+      "isOrigin": false
+    },
+    "delayMs": 750
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_self_03",
+      "claimId": "c1",
+      "url": "https://mp.weixin.qq.com/s/demo-coffee-cancer-link",
+      "site": "健康养生每日谈（微信公众号）",
+      "title": "咖啡与癌症有关？这项研究终于给出了答案",
+      "snippet": "研究显示，常喝咖啡的人更容易出现消化道肿瘤，专家建议每天不超过一杯。",
+      "publishedAt": "2024-05-06T00:20:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 癌症 有关 研究",
+      "stance": "support",
+      "tier": "self",
+      "groupId": "g3",
+      "isOrigin": true
+    },
+    "delayMs": 800
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_marketing_04",
+      "claimId": "c2",
+      "url": "https://www.toutiao.com/article/7365123456789012345/",
+      "site": "养生揭秘局",
+      "title": "专家证实：喝咖啡会致癌！很多人还在天天喝",
+      "snippet": "多位专家已经证实，咖啡中的丙烯酰胺会直接导致癌症，越喝风险越高。",
+      "publishedAt": "2024-05-20T03:10:00.000Z",
+      "direction": "pro",
+      "query": "喝咖啡 致癌 专家 证实",
+      "stance": "support",
+      "tier": "marketing",
+      "groupId": "g1",
+      "isOrigin": true
+    },
+    "delayMs": 850
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_wash_05",
+      "claimId": "c2",
+      "url": "https://baijiahao.baidu.com/s?id=1800000000000000001",
+      "site": "每日养生课堂（百家号）",
+      "title": "喝咖啡会致癌？专家已经证实，别不当回事",
+      "snippet": "专家证实咖啡中的丙烯酰胺是明确致癌物，长期饮用等于慢性中毒。",
+      "publishedAt": "2024-05-21T02:00:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 致癌 专家 证实",
+      "stance": "support",
+      "tier": "marketing",
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 750
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_wash_06",
+      "claimId": "c3",
+      "url": "https://mp.weixin.qq.com/s/demo-coffee-30-percent",
+      "site": "养生小妙招（微信公众号）",
+      "title": "每天一杯咖啡，患癌风险增加 30%？",
+      "snippet": "有数据称，每天喝一杯咖啡，消化道肿瘤风险会增加 30%，专家已证实。",
+      "publishedAt": "2024-05-22T01:10:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 每天一杯 风险 30%",
+      "stance": "support",
+      "tier": "self",
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 700
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_wash_07",
+      "claimId": "c2",
+      "url": "https://www.sohu.com/a/770000001_120000000",
+      "site": "健康生活观察",
+      "title": "咖啡被列为 2A 类致癌物，专家提醒尽快戒掉",
+      "snippet": "世界卫生组织早已把咖啡列为 2A 类致癌物，专家提醒每天喝咖啡的人尽快戒掉。",
+      "publishedAt": "2024-05-23T04:30:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 2A 类致癌物 世卫",
+      "stance": "support",
+      "tier": "unknown",
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 650
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_wash_08",
+      "claimId": "c3",
+      "url": "https://www.163.com/dy/article/J0000000000000000.html",
+      "site": "养生 Daily",
+      "title": "研究实锤：咖啡喝得越多，癌症风险越高",
+      "snippet": "一项研究实锤，每天多喝一杯咖啡，癌症风险增加 30%，喝得越多风险越高。",
+      "publishedAt": "2024-05-24T00:40:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 喝得多 癌症 风险",
+      "stance": "support",
+      "tier": "marketing",
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 800
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_wash_09",
+      "claimId": "c2",
+      "url": "https://www.xiaohongshu.com/explore/demo-coffee-cancer",
+      "site": "小红书 · 养生笔记",
+      "title": "专家都证实了！咖啡真的会致癌",
+      "snippet": "刷到好多医生都在说咖啡致癌，专家已经证实，姐妹们赶紧戒了吧。",
+      "publishedAt": "2024-05-25T12:00:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 致癌 医生 提醒",
+      "stance": "support",
+      "tier": "self",
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 750
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_wash_10",
+      "claimId": "c1",
+      "url": "https://www.zhihu.com/question/600000000/answer/3000000001",
+      "site": "知乎 · 健康科普答主",
+      "title": "为什么说喝咖啡会致癌？",
+      "snippet": "咖啡豆烘焙过程中会产生丙烯酰胺，这是一种明确致癌物，所以喝咖啡会致癌。",
+      "publishedAt": "2024-05-26T07:20:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 丙烯酰胺 致癌 原理",
+      "stance": "support",
+      "tier": "marketing",
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 900
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_wash_11",
+      "claimId": "c1",
+      "url": "https://weibo.com/0000000000/OkN000000",
+      "site": "微博 · 养生博主",
+      "title": "咖啡致癌实锤！专家已证实",
+      "snippet": "转发：专家证实咖啡致癌，每天一杯风险增加三成。",
+      "publishedAt": "2024-05-27T05:00:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 致癌 实锤",
+      "stance": "support",
+      "tier": "unknown",
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 700
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_repost_12",
+      "claimId": "c1",
+      "url": "https://www.jiankang-news.cn/article/2024/0507/coffee.html",
+      "site": "健康资讯网",
+      "title": "咖啡与癌症有关？研究称存在关联",
+      "snippet": "本文转载自健康养生每日谈。研究显示咖啡摄入与消化道肿瘤存在关联。",
+      "publishedAt": "2024-05-07T03:00:00.000Z",
+      "direction": "pro",
+      "query": "咖啡 癌症 关联 研究",
+      "stance": "support",
+      "tier": "self",
+      "groupId": "g3",
+      "isOrigin": false
+    },
+    "delayMs": 650
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_official_13",
+      "claimId": "c2",
+      "url": "https://www.cfsa.net.cn/Article/News/2024/20240528-coffee.html",
+      "site": "国家食品安全风险评估中心",
+      "title": "关于“喝咖啡致癌”网络传言的科学解读",
+      "snippet": "丙烯酰胺在咖啡中的含量极低，目前没有证据表明正常饮用咖啡会导致癌症，网传“专家证实”系对研究的误读。",
+      "publishedAt": "2024-05-28T02:00:00.000Z",
+      "direction": "con",
+      "query": "咖啡 致癌 官方 辟谣",
+      "stance": "refute",
+      "tier": "official",
+      "groupId": "g4",
+      "isOrigin": true
+    },
+    "delayMs": 850
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src_factcheck_14",
+      "claimId": "c3",
+      "url": "https://www.jksb.com.cn/news/2024-05/29/content_229102.html",
+      "site": "健康时报网",
+      "title": "“每天一杯咖啡患癌风险增加 30%”不实",
+      "snippet": "记者核查发现，网传“30%”数据并无出处，原始研究并未给出该结论，相关说法系营销号编造。",
+      "publishedAt": "2024-05-29T01:20:00.000Z",
+      "direction": "con",
+      "query": "咖啡 风险 30% 核查",
+      "stance": "refute",
+      "tier": "media",
+      "groupId": "g4",
+      "isOrigin": false
+    },
+    "delayMs": 900
+  },
+  {
+    "type": "stage",
+    "stage": "search",
+    "status": "done",
+    "message": "共检索到 14 条候选来源",
+    "delayMs": 400
+  },
+  {
+    "type": "stage",
+    "stage": "grade",
+    "status": "start",
+    "message": "按来源类型分级并判断立场",
+    "delayMs": 400
+  },
+  {
+    "type": "source_update",
+    "id": "src_paper_01",
+    "patch": {
+      "stance": "irrelevant",
+      "tier": "official"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_media_02",
+    "patch": {
+      "stance": "support",
+      "tier": "media"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_self_03",
+    "patch": {
+      "stance": "support",
+      "tier": "self"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_marketing_04",
+    "patch": {
+      "stance": "support",
+      "tier": "marketing"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_05",
+    "patch": {
+      "stance": "support",
+      "tier": "marketing"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_06",
+    "patch": {
+      "stance": "support",
+      "tier": "self"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_07",
+    "patch": {
+      "stance": "support",
+      "tier": "unknown"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_08",
+    "patch": {
+      "stance": "support",
+      "tier": "marketing"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_09",
+    "patch": {
+      "stance": "support",
+      "tier": "self"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_10",
+    "patch": {
+      "stance": "support",
+      "tier": "marketing"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_11",
+    "patch": {
+      "stance": "support",
+      "tier": "unknown"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_repost_12",
+    "patch": {
+      "stance": "support",
+      "tier": "self"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_official_13",
+    "patch": {
+      "stance": "refute",
+      "tier": "official"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "source_update",
+    "id": "src_factcheck_14",
+    "patch": {
+      "stance": "refute",
+      "tier": "media"
+    },
+    "delayMs": 120
+  },
+  {
+    "type": "stage",
+    "stage": "grade",
+    "status": "done",
+    "message": "完成 14 条来源分级",
+    "delayMs": 400
+  },
+  {
+    "type": "stage",
+    "stage": "cluster",
+    "status": "start",
+    "message": "识别同源转载并合并",
+    "delayMs": 400
+  },
+  {
+    "type": "source_update",
+    "id": "src_paper_01",
+    "patch": {
+      "groupId": "g2",
+      "isOrigin": true
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_media_02",
+    "patch": {
+      "groupId": "g2",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_self_03",
+    "patch": {
+      "groupId": "g3",
+      "isOrigin": true
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_marketing_04",
+    "patch": {
+      "groupId": "g1",
+      "isOrigin": true
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_05",
+    "patch": {
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_06",
+    "patch": {
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_07",
+    "patch": {
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_08",
+    "patch": {
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_09",
+    "patch": {
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_10",
+    "patch": {
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_wash_11",
+    "patch": {
+      "groupId": "g1",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_repost_12",
+    "patch": {
+      "groupId": "g3",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_official_13",
+    "patch": {
+      "groupId": "g4",
+      "isOrigin": true
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "source_update",
+    "id": "src_factcheck_14",
+    "patch": {
+      "groupId": "g4",
+      "isOrigin": false
+    },
+    "delayMs": 100
+  },
+  {
+    "type": "groups",
+    "groups": [
+      {
+        "id": "g1",
+        "claimId": "c2",
+        "originSourceId": "src_marketing_04",
+        "memberIds": [
+          "src_marketing_04",
+          "src_wash_05",
+          "src_wash_06",
+          "src_wash_07",
+          "src_wash_08",
+          "src_wash_09",
+          "src_wash_10",
+          "src_wash_11"
+        ],
+        "reason": "8 条内容的标题与正文高度重合，均以“专家证实”为核心，最早可追溯到“养生揭秘局”，其余为洗稿改写。"
+      },
+      {
+        "id": "g2",
+        "claimId": "c1",
+        "originSourceId": "src_paper_01",
+        "memberIds": ["src_paper_01", "src_media_02"],
+        "reason": "媒体报道仅引用同一篇队列研究，未做独立采访或补充新证据。"
+      },
+      {
+        "id": "g3",
+        "claimId": "c1",
+        "originSourceId": "src_self_03",
+        "memberIds": ["src_self_03", "src_repost_12"],
+        "reason": "后者全文转载前者，无新增信息，属同源转载。"
+      },
+      {
+        "id": "g4",
+        "claimId": "c2",
+        "originSourceId": "src_official_13",
+        "memberIds": ["src_official_13", "src_factcheck_14"],
+        "reason": "事实核查文章引用同一份官方解读，属同源引用。"
+      }
+    ],
+    "delayMs": 700
+  },
+  {
+    "type": "stage",
+    "stage": "cluster",
+    "status": "done",
+    "message": "合并为 4 个同源组，其中 1 组含 8 条营销号洗稿",
+    "delayMs": 400
+  },
+  {
+    "type": "stage",
+    "stage": "trace",
+    "status": "start",
+    "message": "按发布时间还原信息变形过程",
+    "delayMs": 400
+  },
+  {
+    "type": "timeline",
+    "claimId": "c1",
+    "steps": [
+      {
+        "sourceId": "src_paper_01",
+        "publishedAt": "2024-03-12T02:00:00.000Z",
+        "quote": "研究观察到咖啡摄入与部分消化道肿瘤风险存在弱相关性，作者强调相关不等于因果。"
+      },
+      {
+        "sourceId": "src_media_02",
+        "publishedAt": "2024-04-18T01:30:00.000Z",
+        "quote": "一项覆盖 12 万人的队列研究提示，每天饮用咖啡者消化道肿瘤发生率略高。",
+        "mutation": "删去“相关不等于因果”的限定，标题改为“研究发现相关”，暗示因果关系。"
+      },
+      {
+        "sourceId": "src_self_03",
+        "publishedAt": "2024-05-06T00:20:00.000Z",
+        "quote": "研究显示，常喝咖啡的人更容易出现消化道肿瘤。",
+        "mutation": "“弱相关”升级为“更容易患癌”，并虚构“专家建议每天不超过一杯”。"
+      },
+      {
+        "sourceId": "src_marketing_04",
+        "publishedAt": "2024-05-20T03:10:00.000Z",
+        "quote": "多位专家已经证实，咖啡中的丙烯酰胺会直接导致癌症。",
+        "mutation": "“有关联”变成“专家证实致癌”，把丙烯酰胺的风险等同于咖啡本身。"
+      }
+    ],
+    "delayMs": 1500
+  },
+  {
+    "type": "stage",
+    "stage": "trace",
+    "status": "done",
+    "message": "完成 1 条变形时间线",
+    "delayMs": 400
+  },
+  {
+    "type": "stage",
+    "stage": "verdict",
+    "status": "start",
+    "message": "综合证据给出五档判决",
+    "delayMs": 400
+  },
+  {
+    "type": "verdict",
+    "verdict": {
+      "level": "out_of_context",
+      "confidence": 0.82,
+      "headline": "“喝咖啡会致癌”是典型断章取义",
+      "summary": "原始队列研究只报告了弱相关性，并明确强调不等于因果；经过媒体、自媒体、营销号三层转写后，被包装成“专家已证实致癌”。目前没有可靠证据支持正常饮用咖啡会致癌，网传“风险增加 30%”也没有出处。",
+      "claims": [
+        {
+          "claimId": "c1",
+          "level": "out_of_context",
+          "confidence": 0.84,
+          "summary": "原论文仅提示弱相关且强调不等于因果，被逐层改写成确定因果。",
+          "citationIds": [
+            "src_paper_01",
+            "src_media_02",
+            "src_self_03",
+            "src_marketing_04",
+            "src_official_13"
+          ]
+        },
+        {
+          "claimId": "c2",
+          "level": "false",
+          "confidence": 0.91,
+          "summary": "没有任何专家证实咖啡致癌，官方解读明确指出网传“专家证实”是对研究的误读。",
+          "citationIds": ["src_official_13", "src_marketing_04"]
+        },
+        {
+          "claimId": "c3",
+          "level": "unverified",
+          "confidence": 0.33,
+          "summary": "“风险增加 30%”在原始研究和官方解读中均无出处，仅见于营销号洗稿。",
+          "citationIds": ["src_wash_06", "src_wash_08", "src_factcheck_14"]
+        }
+      ],
+      "rebuttalCard": {
+        "title": "三句话看懂“咖啡致癌”传言",
+        "body": "① 原研究只说“存在弱相关”，作者强调不等于因果；② “专家证实”是营销号编的，官方已辟谣；③ “风险增加 30%”没有任何出处。"
+      }
+    },
+    "delayMs": 2000
+  },
+  {
+    "type": "stage",
+    "stage": "verdict",
+    "status": "done",
+    "message": "判决完成：断章取义",
+    "delayMs": 400
+  },
+  {
+    "type": "stats",
+    "stats": {
+      "apiCalls": 9,
+      "sourcesVisited": 23,
+      "independentWitnesses": 4,
+      "durationMs": 25000
+    },
+    "delayMs": 400
+  },
+  {
+    "type": "done",
+    "caseFile": {
+      "id": "case-20240603-coffee",
+      "input": "网传喝咖啡会致癌，还说专家已经证实了，每天一杯风险增加 30%，这是真的吗？",
+      "createdAt": "2024-06-03T09:00:00.000Z",
+      "claims": [
+        {
+          "id": "c1",
+          "text": "喝咖啡会致癌。",
+          "kind": "causal"
+        },
+        {
+          "id": "c2",
+          "text": "专家已经证实了这一结论。",
+          "kind": "person"
+        },
+        {
+          "id": "c3",
+          "text": "每天喝一杯咖啡，患癌风险会增加 30%。",
+          "kind": "number"
+        }
+      ],
+      "sources": [
+        {
+          "id": "src_paper_01",
+          "claimId": "c1",
+          "url": "https://www.cn-health-research.org.cn/article/2024/coffee-colorectal-cohort.html",
+          "site": "中国营养与肿瘤研究协作组",
+          "title": "咖啡摄入与消化道肿瘤风险的队列研究：一项多中心随访分析",
+          "snippet": "研究观察到咖啡摄入量与部分消化道肿瘤风险存在弱相关性，作者强调相关不等于因果，仍需机制研究验证。",
+          "publishedAt": "2024-03-12T02:00:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 致癌 研究 队列",
+          "stance": "irrelevant",
+          "tier": "official",
+          "groupId": "g2",
+          "isOrigin": true
+        },
+        {
+          "id": "src_media_02",
+          "claimId": "c1",
+          "url": "https://www.jksb.com.cn/news/2024-04/18/content_228731.html",
+          "site": "健康时报网",
+          "title": "新研究发现：常喝咖啡与消化道肿瘤风险相关",
+          "snippet": "一项覆盖 12 万人的队列研究提示，每天饮用咖啡者消化道肿瘤发生率略高，但研究者提醒相关性有限。",
+          "publishedAt": "2024-04-18T01:30:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 癌症 最新研究",
+          "stance": "support",
+          "tier": "media",
+          "groupId": "g2",
+          "isOrigin": false
+        },
+        {
+          "id": "src_self_03",
+          "claimId": "c1",
+          "url": "https://mp.weixin.qq.com/s/demo-coffee-cancer-link",
+          "site": "健康养生每日谈（微信公众号）",
+          "title": "咖啡与癌症有关？这项研究终于给出了答案",
+          "snippet": "研究显示，常喝咖啡的人更容易出现消化道肿瘤，专家建议每天不超过一杯。",
+          "publishedAt": "2024-05-06T00:20:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 癌症 有关 研究",
+          "stance": "support",
+          "tier": "self",
+          "groupId": "g3",
+          "isOrigin": true
+        },
+        {
+          "id": "src_marketing_04",
+          "claimId": "c2",
+          "url": "https://www.toutiao.com/article/7365123456789012345/",
+          "site": "养生揭秘局",
+          "title": "专家证实：喝咖啡会致癌！很多人还在天天喝",
+          "snippet": "多位专家已经证实，咖啡中的丙烯酰胺会直接导致癌症，越喝风险越高。",
+          "publishedAt": "2024-05-20T03:10:00.000Z",
+          "direction": "pro",
+          "query": "喝咖啡 致癌 专家 证实",
+          "stance": "support",
+          "tier": "marketing",
+          "groupId": "g1",
+          "isOrigin": true
+        },
+        {
+          "id": "src_wash_05",
+          "claimId": "c2",
+          "url": "https://baijiahao.baidu.com/s?id=1800000000000000001",
+          "site": "每日养生课堂（百家号）",
+          "title": "喝咖啡会致癌？专家已经证实，别不当回事",
+          "snippet": "专家证实咖啡中的丙烯酰胺是明确致癌物，长期饮用等于慢性中毒。",
+          "publishedAt": "2024-05-21T02:00:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 致癌 专家 证实",
+          "stance": "support",
+          "tier": "marketing",
+          "groupId": "g1",
+          "isOrigin": false
+        },
+        {
+          "id": "src_wash_06",
+          "claimId": "c3",
+          "url": "https://mp.weixin.qq.com/s/demo-coffee-30-percent",
+          "site": "养生小妙招（微信公众号）",
+          "title": "每天一杯咖啡，患癌风险增加 30%？",
+          "snippet": "有数据称，每天喝一杯咖啡，消化道肿瘤风险会增加 30%，专家已证实。",
+          "publishedAt": "2024-05-22T01:10:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 每天一杯 风险 30%",
+          "stance": "support",
+          "tier": "self",
+          "groupId": "g1",
+          "isOrigin": false
+        },
+        {
+          "id": "src_wash_07",
+          "claimId": "c2",
+          "url": "https://www.sohu.com/a/770000001_120000000",
+          "site": "健康生活观察",
+          "title": "咖啡被列为 2A 类致癌物，专家提醒尽快戒掉",
+          "snippet": "世界卫生组织早已把咖啡列为 2A 类致癌物，专家提醒每天喝咖啡的人尽快戒掉。",
+          "publishedAt": "2024-05-23T04:30:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 2A 类致癌物 世卫",
+          "stance": "support",
+          "tier": "unknown",
+          "groupId": "g1",
+          "isOrigin": false
+        },
+        {
+          "id": "src_wash_08",
+          "claimId": "c3",
+          "url": "https://www.163.com/dy/article/J0000000000000000.html",
+          "site": "养生 Daily",
+          "title": "研究实锤：咖啡喝得越多，癌症风险越高",
+          "snippet": "一项研究实锤，每天多喝一杯咖啡，癌症风险增加 30%，喝得越多风险越高。",
+          "publishedAt": "2024-05-24T00:40:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 喝得多 癌症 风险",
+          "stance": "support",
+          "tier": "marketing",
+          "groupId": "g1",
+          "isOrigin": false
+        },
+        {
+          "id": "src_wash_09",
+          "claimId": "c2",
+          "url": "https://www.xiaohongshu.com/explore/demo-coffee-cancer",
+          "site": "小红书 · 养生笔记",
+          "title": "专家都证实了！咖啡真的会致癌",
+          "snippet": "刷到好多医生都在说咖啡致癌，专家已经证实，姐妹们赶紧戒了吧。",
+          "publishedAt": "2024-05-25T12:00:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 致癌 医生 提醒",
+          "stance": "support",
+          "tier": "self",
+          "groupId": "g1",
+          "isOrigin": false
+        },
+        {
+          "id": "src_wash_10",
+          "claimId": "c1",
+          "url": "https://www.zhihu.com/question/600000000/answer/3000000001",
+          "site": "知乎 · 健康科普答主",
+          "title": "为什么说喝咖啡会致癌？",
+          "snippet": "咖啡豆烘焙过程中会产生丙烯酰胺，这是一种明确致癌物，所以喝咖啡会致癌。",
+          "publishedAt": "2024-05-26T07:20:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 丙烯酰胺 致癌 原理",
+          "stance": "support",
+          "tier": "marketing",
+          "groupId": "g1",
+          "isOrigin": false
+        },
+        {
+          "id": "src_wash_11",
+          "claimId": "c1",
+          "url": "https://weibo.com/0000000000/OkN000000",
+          "site": "微博 · 养生博主",
+          "title": "咖啡致癌实锤！专家已证实",
+          "snippet": "转发：专家证实咖啡致癌，每天一杯风险增加三成。",
+          "publishedAt": "2024-05-27T05:00:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 致癌 实锤",
+          "stance": "support",
+          "tier": "unknown",
+          "groupId": "g1",
+          "isOrigin": false
+        },
+        {
+          "id": "src_repost_12",
+          "claimId": "c1",
+          "url": "https://www.jiankang-news.cn/article/2024/0507/coffee.html",
+          "site": "健康资讯网",
+          "title": "咖啡与癌症有关？研究称存在关联",
+          "snippet": "本文转载自健康养生每日谈。研究显示咖啡摄入与消化道肿瘤存在关联。",
+          "publishedAt": "2024-05-07T03:00:00.000Z",
+          "direction": "pro",
+          "query": "咖啡 癌症 关联 研究",
+          "stance": "support",
+          "tier": "self",
+          "groupId": "g3",
+          "isOrigin": false
+        },
+        {
+          "id": "src_official_13",
+          "claimId": "c2",
+          "url": "https://www.cfsa.net.cn/Article/News/2024/20240528-coffee.html",
+          "site": "国家食品安全风险评估中心",
+          "title": "关于“喝咖啡致癌”网络传言的科学解读",
+          "snippet": "丙烯酰胺在咖啡中的含量极低，目前没有证据表明正常饮用咖啡会导致癌症，网传“专家证实”系对研究的误读。",
+          "publishedAt": "2024-05-28T02:00:00.000Z",
+          "direction": "con",
+          "query": "咖啡 致癌 官方 辟谣",
+          "stance": "refute",
+          "tier": "official",
+          "groupId": "g4",
+          "isOrigin": true
+        },
+        {
+          "id": "src_factcheck_14",
+          "claimId": "c3",
+          "url": "https://www.jksb.com.cn/news/2024-05/29/content_229102.html",
+          "site": "健康时报网",
+          "title": "“每天一杯咖啡患癌风险增加 30%”不实",
+          "snippet": "记者核查发现，网传“30%”数据并无出处，原始研究并未给出该结论，相关说法系营销号编造。",
+          "publishedAt": "2024-05-29T01:20:00.000Z",
+          "direction": "con",
+          "query": "咖啡 风险 30% 核查",
+          "stance": "refute",
+          "tier": "media",
+          "groupId": "g4",
+          "isOrigin": false
+        }
+      ],
+      "groups": [
+        {
+          "id": "g1",
+          "claimId": "c2",
+          "originSourceId": "src_marketing_04",
+          "memberIds": [
+            "src_marketing_04",
+            "src_wash_05",
+            "src_wash_06",
+            "src_wash_07",
+            "src_wash_08",
+            "src_wash_09",
+            "src_wash_10",
+            "src_wash_11"
+          ],
+          "reason": "8 条内容的标题与正文高度重合，均以“专家证实”为核心，最早可追溯到“养生揭秘局”，其余为洗稿改写。"
+        },
+        {
+          "id": "g2",
+          "claimId": "c1",
+          "originSourceId": "src_paper_01",
+          "memberIds": ["src_paper_01", "src_media_02"],
+          "reason": "媒体报道仅引用同一篇队列研究，未做独立采访或补充新证据。"
+        },
+        {
+          "id": "g3",
+          "claimId": "c1",
+          "originSourceId": "src_self_03",
+          "memberIds": ["src_self_03", "src_repost_12"],
+          "reason": "后者全文转载前者，无新增信息，属同源转载。"
+        },
+        {
+          "id": "g4",
+          "claimId": "c2",
+          "originSourceId": "src_official_13",
+          "memberIds": ["src_official_13", "src_factcheck_14"],
+          "reason": "事实核查文章引用同一份官方解读，属同源引用。"
+        }
+      ],
+      "timelines": {
+        "c1": [
+          {
+            "sourceId": "src_paper_01",
+            "publishedAt": "2024-03-12T02:00:00.000Z",
+            "quote": "研究观察到咖啡摄入与部分消化道肿瘤风险存在弱相关性，作者强调相关不等于因果。"
+          },
+          {
+            "sourceId": "src_media_02",
+            "publishedAt": "2024-04-18T01:30:00.000Z",
+            "quote": "一项覆盖 12 万人的队列研究提示，每天饮用咖啡者消化道肿瘤发生率略高。",
+            "mutation": "删去“相关不等于因果”的限定，标题改为“研究发现相关”，暗示因果关系。"
+          },
+          {
+            "sourceId": "src_self_03",
+            "publishedAt": "2024-05-06T00:20:00.000Z",
+            "quote": "研究显示，常喝咖啡的人更容易出现消化道肿瘤。",
+            "mutation": "“弱相关”升级为“更容易患癌”，并虚构“专家建议每天不超过一杯”。"
+          },
+          {
+            "sourceId": "src_marketing_04",
+            "publishedAt": "2024-05-20T03:10:00.000Z",
+            "quote": "多位专家已经证实，咖啡中的丙烯酰胺会直接导致癌症。",
+            "mutation": "“有关联”变成“专家证实致癌”，把丙烯酰胺的风险等同于咖啡本身。"
+          }
+        ]
+      },
+      "verdict": {
+        "level": "out_of_context",
+        "confidence": 0.82,
+        "headline": "“喝咖啡会致癌”是典型断章取义",
+        "summary": "原始队列研究只报告了弱相关性，并明确强调不等于因果；经过媒体、自媒体、营销号三层转写后，被包装成“专家已证实致癌”。目前没有可靠证据支持正常饮用咖啡会致癌，网传“风险增加 30%”也没有出处。",
+        "claims": [
+          {
+            "claimId": "c1",
+            "level": "out_of_context",
+            "confidence": 0.84,
+            "summary": "原论文仅提示弱相关且强调不等于因果，被逐层改写成确定因果。",
+            "citationIds": [
+              "src_paper_01",
+              "src_media_02",
+              "src_self_03",
+              "src_marketing_04",
+              "src_official_13"
+            ]
+          },
+          {
+            "claimId": "c2",
+            "level": "false",
+            "confidence": 0.91,
+            "summary": "没有任何专家证实咖啡致癌，官方解读明确指出网传“专家证实”是对研究的误读。",
+            "citationIds": ["src_official_13", "src_marketing_04"]
+          },
+          {
+            "claimId": "c3",
+            "level": "unverified",
+            "confidence": 0.33,
+            "summary": "“风险增加 30%”在原始研究和官方解读中均无出处，仅见于营销号洗稿。",
+            "citationIds": ["src_wash_06", "src_wash_08", "src_factcheck_14"]
+          }
+        ],
+        "rebuttalCard": {
+          "title": "三句话看懂“咖啡致癌”传言",
+          "body": "① 原研究只说“存在弱相关”，作者强调不等于因果；② “专家证实”是营销号编的，官方已辟谣；③ “风险增加 30%”没有任何出处。"
+        }
+      },
+      "stats": {
+        "apiCalls": 9,
+        "sourcesVisited": 23,
+        "independentWitnesses": 4,
+        "durationMs": 25000
+      }
+    },
+    "delayMs": 770
+  }
+]
