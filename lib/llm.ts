@@ -256,7 +256,8 @@ export async function embed(texts: string[]): Promise<number[][]> {
   for (let start = 0; start < texts.length; start += EMBEDDING_BATCH_SIZE) {
     const batch = texts.slice(start, start + EMBEDDING_BATCH_SIZE);
     const response = await client.embeddings.create(
-      { model, input: batch },
+      // 部分网关只接受 float，SDK 默认的 base64 会被 400 拒绝
+      { model, input: batch, encoding_format: 'float' },
       { timeout: DEFAULT_TIMEOUT_MS, maxRetries: 0 },
     );
 
