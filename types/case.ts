@@ -52,6 +52,8 @@ export const SourceSchema = z.object({
   tier: TierSchema.optional(),
   groupId: z.string().optional(),
   isOrigin: z.boolean().optional(),
+  /** 链接校验结果：不可达的来源不参与判决与引用。 */
+  reachable: z.boolean().optional(),
 });
 export type Source = z.infer<typeof SourceSchema>;
 
@@ -83,6 +85,14 @@ export const ClaimVerdictSchema = z.object({
   confidence: z.number().min(0).max(1),
   summary: z.string(),
   citationIds: z.array(z.string()),
+  /** 同一疑点同时存在独立支持与反驳时记录冲突；单向证据不写入。 */
+  conflict: z
+    .object({
+      supportIds: z.array(z.string()),
+      refuteIds: z.array(z.string()),
+      resolution: z.string(),
+    })
+    .optional(),
 });
 export type ClaimVerdict = z.infer<typeof ClaimVerdictSchema>;
 
@@ -91,6 +101,8 @@ export const VerdictSchema = z.object({
   level: VerdictLevelSchema,
   /** 0-1。 */
   confidence: z.number().min(0).max(1),
+  /** 独立证人数：≥2 为 multi，1 为 single，0 为 none。 */
+  evidenceState: z.enum(['multi', 'single', 'none']).optional(),
   headline: z.string(),
   summary: z.string(),
   claims: z.array(ClaimVerdictSchema),

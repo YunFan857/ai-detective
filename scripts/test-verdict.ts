@@ -8,7 +8,13 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import caseDemo from '../mock/case-demo.json';
-import { collectWitnesses, makeVerdict, type Witness } from '../lib/pipeline/verdict';
+import {
+  checkReachability,
+  collectWitnesses,
+  makeVerdict,
+  type EvidenceState,
+  type Witness,
+} from '../lib/pipeline/verdict';
 import {
   CaseFileSchema,
   VerdictSchema,
@@ -47,6 +53,26 @@ function disableLlm(): void {
   delete process.env.LLM_MODEL;
 }
 
+/** 链接校验全程离线：example.com 一律可达，含 dead 的返回 404；本地 stub 服务透传。 */
+function installFetchStub(): () => void {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    const url =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.includes('127.0.0.1')) {
+      return original(input, init);
+    }
+    return new Response('', { status: url.includes('dead') ? 404 : 200 });
+  }) as typeof fetch;
+
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+
 function captureWarnings(): { messages: string[]; restore: () => void } {
   const original = console.warn;
   const messages: string[] = [];
@@ -71,17 +97,20 @@ function makeSource(options: {
   site?: string;
   stance?: Stance;
   tier?: Tier;
+  url?: string;
+  query?: string;
+  publishedAt?: string;
 }): Source {
   return {
     id: options.id,
     claimId: options.claimId,
-    url: `https://example.com/${options.id}`,
+    url: options.url ?? `https://example.com/${options.id}`,
     site: options.site ?? `站点 ${options.id}`,
     title: `标题 ${options.id}`,
     snippet: `摘要 ${options.id}`,
-    publishedAt: '2024-01-01T00:00:00.000Z',
+    publishedAt: options.publishedAt ?? '2024-01-01T00:00:00.000Z',
     direction: options.stance === 'refute' ? 'con' : 'pro',
-    query: '测试检索词',
+    query: options.query ?? '测试检索词',
     stance: options.stance,
     tier: options.tier,
   };
@@ -187,6 +216,7 @@ type RuleCase = {
   timelines: Record<string, TimelineStep[]>;
   expectLevel: Verdict['level'];
   expectConfidence?: number;
+  expectEvidenceState: EvidenceState;
 };
 
 /** 规则路径：模型必定失败，只用规则结论与兜底文案。 */
@@ -217,6 +247,11 @@ async function runRuleCase(testCase: RuleCase): Promise<Verdict> {
 
     assertVerdict(verdict, testCase.sources, testCase.label);
     assert.equal(verdict.level, testCase.expectLevel, `${testCase.label} 的整案判决不符`);
+    assert.equal(
+      verdict.evidenceState,
+      testCase.expectEvidenceState,
+      `${testCase.label} 的 evidenceState 不符`,
+    );
     if (testCase.expectConfidence !== undefined) {
       assert.equal(
         verdict.confidence,
@@ -293,6 +328,7 @@ async function testTrue(): Promise<void> {
     timelines: {},
     expectLevel: 'true',
     expectConfidence: 0.82,
+    expectEvidenceState: 'multi',
   });
 }
 
@@ -330,6 +366,7 @@ async function testFalse(): Promise<void> {
     timelines: {},
     expectLevel: 'false',
     expectConfidence: 0.9,
+    expectEvidenceState: 'multi',
   });
 
   // 2b. 支持方全部来自营销号，反驳方只有自媒体
@@ -364,6 +401,7 @@ async function testFalse(): Promise<void> {
     timelines: {},
     expectLevel: 'false',
     expectConfidence: 0.8,
+    expectEvidenceState: 'multi',
   });
   const marketingVerdict = must(
     verdict.claims.find((item) => item.claimId === 'f2'),
@@ -433,6 +471,7 @@ async function testOutOfContext(): Promise<void> {
     timelines,
     expectLevel: 'out_of_context',
     expectConfidence: 0.84,
+    expectEvidenceState: 'multi',
   });
 }
 
@@ -483,28 +522,81 @@ async function testPartlyTrue(): Promise<void> {
     timelines: {},
     expectLevel: 'partly_true',
     expectConfidence: 0.62,
+    expectEvidenceState: 'multi',
   });
   assert.notEqual(verdict.level, 'false', '4 不能被误判为明确谣言');
+
+  const item = must(
+    verdict.claims.find((candidate) => candidate.claimId === 'p1'),
+    '4 缺少 p1 的疑点判决',
+  );
+  assert.ok(item.conflict, '4 正反都有独立证人，应记录 conflict');
+  assert.deepEqual(item.conflict.supportIds, ['p1-official'], '4 的 conflict 支持方不符');
+  assert.deepEqual(item.conflict.refuteIds, ['p1-media'], '4 的 conflict 反驳方不符');
+  assert.ok(
+    item.conflict.resolution.includes('采信支持方'),
+    `4 的冲突应按 tier 采信支持方：${item.conflict.resolution}`,
+  );
+  console.log(`- conflict：${item.conflict.resolution}`);
 }
 
 /** 5. 无法证实：零证据 / 只有自媒体 / 来源互冲且无权威依据。 */
 async function testUnverified(): Promise<void> {
-  console.log('\n=== 5. unverified ===');
+  console.log('\n=== 5. unverified 与证据三态 ===');
 
+  // 5a. 零来源 → none + 「我不知道」，摘要要交代查了什么、看了多少、为什么确认不了
   const emptyClaim = makeClaim('u0', '咖啡能治百病。');
-  await runRuleCase({
-    label: 'unverified（零证据）',
+  const emptyVerdict = await runRuleCase({
+    label: 'unverified（零来源）',
     input: '咖啡能治百病。',
     claims: [emptyClaim],
     sources: [],
     groups: [],
     timelines: {},
     expectLevel: 'unverified',
-    expectConfidence: 0.12,
+    expectConfidence: 0.1,
+    expectEvidenceState: 'none',
   });
+  assert.equal(emptyVerdict.headline, '我不知道', '5a 零来源的 headline 必须是「我不知道」');
+  assert.ok(
+    emptyVerdict.summary.includes('没有取到任何来源'),
+    `5a 摘要未交代零来源：${emptyVerdict.summary}`,
+  );
+  assert.ok(emptyVerdict.summary.includes('咖啡能治百病'), '5a 摘要未列出疑点原文');
 
+  // 5b. 唯一来源链接打不开 → 等同于零证人，摘要要列出检索词、来源数、死链数
+  const deadClaim = makeClaim('u-dead', '咖啡能防癌。');
+  const deadSources = [
+    makeSource({
+      id: 'u-dead-official',
+      claimId: 'u-dead',
+      stance: 'support',
+      tier: 'official',
+      url: 'https://dead.example.com/u-dead',
+      query: '咖啡防癌 官方',
+    }),
+  ];
+  const deadVerdict = await runRuleCase({
+    label: 'unverified（来源全部不可达）',
+    input: '咖啡能防癌。',
+    claims: [deadClaim],
+    sources: deadSources,
+    groups: [],
+    timelines: {},
+    expectLevel: 'unverified',
+    expectConfidence: 0.1,
+    expectEvidenceState: 'none',
+  });
+  assert.equal(deadSources[0].reachable, false, '5b 不可达来源应写回 reachable=false');
+  assert.ok(deadVerdict.summary.includes('「咖啡防癌 官方」'), '5b 摘要未列出检索词');
+  assert.ok(deadVerdict.summary.includes('1 条来源'), '5b 摘要未列出来源数量');
+  assert.ok(deadVerdict.summary.includes('1 条链接打不开'), '5b 摘要未交代死链');
+  console.log(`- 零来源摘要：${emptyVerdict.summary}`);
+  console.log(`- 死链摘要：${deadVerdict.summary}`);
+
+  // 5c. 只有 1 个自媒体支持 → single，headline 加提示，置信度不超过 0.5
   const selfOnlyClaim = makeClaim('u1', '咖啡能延寿十年。');
-  await runRuleCase({
+  const selfOnlyVerdict = await runRuleCase({
     label: 'unverified（只有自媒体）',
     input: '咖啡能延寿十年。',
     claims: [selfOnlyClaim],
@@ -513,11 +605,28 @@ async function testUnverified(): Promise<void> {
     timelines: {},
     expectLevel: 'unverified',
     expectConfidence: 0.26,
+    expectEvidenceState: 'single',
   });
+  assert.equal(
+    selfOnlyVerdict.headline,
+    '仅单一来源，置信度低',
+    '5c 单一来源的 headline 必须带提示',
+  );
+  assert.ok(
+    selfOnlyVerdict.summary.startsWith('仅单一来源，置信度低'),
+    `5c 摘要未说明单一来源：${selfOnlyVerdict.summary}`,
+  );
+  assert.ok(selfOnlyVerdict.confidence <= 0.5, '5c 单一来源的置信度不得超过 0.5');
+  assert.equal(
+    must(selfOnlyVerdict.claims[0], '5c 缺少疑点判决').conflict,
+    undefined,
+    '5c 单向证据不应创建 conflict',
+  );
 
+  // 5d. 两个同 tier 自媒体正反互冲且时间无先后 → conflict 未决，按 unverified
   const conflictClaim = makeClaim('u2', '咖啡会让人失眠。');
-  await runRuleCase({
-    label: 'unverified（来源互冲且无权威）',
+  const conflictVerdict = await runRuleCase({
+    label: 'unverified（同 tier 互冲且时间无先后）',
     input: '咖啡会让人失眠。',
     claims: [conflictClaim],
     sources: [
@@ -528,7 +637,139 @@ async function testUnverified(): Promise<void> {
     timelines: {},
     expectLevel: 'unverified',
     expectConfidence: 0.36,
+    expectEvidenceState: 'multi',
   });
+  const conflictItem = must(conflictVerdict.claims[0], '5d 缺少疑点判决');
+  assert.ok(conflictItem.conflict, '5d 正反都有独立证人，应记录 conflict');
+  assert.deepEqual(conflictItem.conflict.supportIds, ['u2-self-pro'], '5d 的 supportIds 不符');
+  assert.deepEqual(conflictItem.conflict.refuteIds, ['u2-self-con'], '5d 的 refuteIds 不符');
+  assert.ok(
+    conflictItem.conflict.resolution.includes('无法判断'),
+    `5d 分不出先后时应说明无法判断：${conflictItem.conflict.resolution}`,
+  );
+  assert.ok(
+    conflictItem.summary.includes('互相矛盾'),
+    `5d 摘要应如实说明矛盾：${conflictItem.summary}`,
+  );
+  console.log(`- 冲突未决：${conflictItem.conflict.resolution}`);
+
+  // 5e. 同 tier 但反驳方发布更晚 → 采信反驳方
+  const lateClaim = makeClaim('u3', '咖啡会让人失眠。');
+  const lateVerdict = await runRuleCase({
+    label: 'unverified（同 tier 反驳方更晚）',
+    input: '咖啡会让人失眠。',
+    claims: [lateClaim],
+    sources: [
+      makeSource({
+        id: 'u3-self-pro',
+        claimId: 'u3',
+        stance: 'support',
+        tier: 'self',
+        publishedAt: '2024-01-01T00:00:00.000Z',
+      }),
+      makeSource({
+        id: 'u3-self-con',
+        claimId: 'u3',
+        stance: 'refute',
+        tier: 'self',
+        publishedAt: '2024-03-01T00:00:00.000Z',
+      }),
+    ],
+    groups: [],
+    timelines: {},
+    expectLevel: 'unverified',
+    expectConfidence: 0.36,
+    expectEvidenceState: 'multi',
+  });
+  const lateItem = must(lateVerdict.claims[0], '5e 缺少疑点判决');
+  assert.ok(lateItem.conflict, '5e 正反都有独立证人，应记录 conflict');
+  assert.ok(
+    lateItem.conflict.resolution.includes('反驳方发布时间更晚'),
+    `5e 应按发布时间采信反驳方：${lateItem.conflict.resolution}`,
+  );
+  console.log(`- 按时间采信：${lateItem.conflict.resolution}`);
+
+  // 5f. 单一权威反驳仍判 false：只限制置信度，不额外否决判决
+  const singleRefuteClaim = makeClaim('u4', '咖啡被证实会致癌。');
+  const singleRefuteVerdict = await runRuleCase({
+    label: 'false（单一官方反驳）',
+    input: '咖啡被证实会致癌。',
+    claims: [singleRefuteClaim],
+    sources: [makeSource({ id: 'u4-official', claimId: 'u4', stance: 'refute', tier: 'official' })],
+    groups: [],
+    timelines: {},
+    expectLevel: 'false',
+    expectConfidence: 0.5,
+    expectEvidenceState: 'single',
+  });
+  assert.equal(
+    singleRefuteVerdict.headline,
+    '仅单一来源，置信度低',
+    '5f 单一来源的 headline 必须带提示',
+  );
+  assert.equal(
+    must(singleRefuteVerdict.claims[0], '5f 缺少疑点判决').conflict,
+    undefined,
+    '5f 单向证据不应创建 conflict',
+  );
+}
+
+/** 链接校验：不可达来源不参与判决与引用，三态按可达来源重算。 */
+async function testReachability(): Promise<void> {
+  console.log('\n=== 链接校验 ===');
+
+  const live = makeSource({
+    id: 'r-live',
+    claimId: 'r1',
+    stance: 'support',
+    tier: 'self',
+    url: 'https://example.com/live',
+  });
+  const dead = makeSource({
+    id: 'r-dead',
+    claimId: 'r1',
+    stance: 'support',
+    tier: 'official',
+    url: 'https://dead.example.com/r-dead',
+  });
+
+  const checked = await checkReachability([live, dead]);
+  assert.equal(checked[0].reachable, true, '可达链接应标记 reachable=true');
+  assert.equal(checked[1].reachable, false, '不可达链接应标记 reachable=false');
+
+  const claim = makeClaim('r1', '咖啡能延寿。');
+  const sources = [
+    makeSource({ id: 'r-live', claimId: 'r1', stance: 'support', tier: 'self' }),
+    makeSource({
+      id: 'r-dead',
+      claimId: 'r1',
+      stance: 'support',
+      tier: 'official',
+      url: 'https://dead.example.com/r-dead',
+    }),
+  ];
+  const verdict = await runRuleCase({
+    label: '链接校验（死链剔除后重算三态）',
+    input: '咖啡能延寿。',
+    claims: [claim],
+    sources,
+    groups: [],
+    timelines: {},
+    expectLevel: 'unverified',
+    expectConfidence: 0.26,
+    expectEvidenceState: 'single',
+  });
+
+  assert.equal(sources[1].reachable, false, 'makeVerdict 应把校验结果写回 sources');
+  assert.equal(sources[0].reachable, true, '可达来源应写回 reachable=true');
+
+  const item = must(verdict.claims[0], '链接校验缺少疑点判决');
+  assert.ok(!item.citationIds.includes('r-dead'), '死链来源不得出现在 citationIds');
+  assert.ok(!item.summary.includes('r-dead'), '死链来源不得被摘要引用');
+  assert.equal(item.level, 'unverified', '剔掉唯一权威支持后应回落 unverified');
+  console.log(
+    `- r-live reachable=${sources[0].reachable}，r-dead reachable=${sources[1].reachable}，citationIds=${JSON.stringify(item.citationIds)}`,
+  );
 }
 
 function restoreEnv(name: string, value: string | undefined): void {
@@ -810,19 +1051,27 @@ async function testCoffeeRegression(): Promise<void> {
     console.log('\nc3 未判 false，按规则回落 unverified');
   }
 
-  console.log(`\n整案：${verdict.level} ${verdict.confidence}｜${verdict.headline}`);
+  console.log(
+    `\n整案：${verdict.level} ${verdict.confidence}｜evidenceState=${verdict.evidenceState}｜${verdict.headline}`,
+  );
 }
 
 async function main(): Promise<void> {
   disableLlm();
+  const restoreFetch = installFetchStub();
 
-  await testTrue();
-  await testFalse();
-  await testOutOfContext();
-  await testPartlyTrue();
-  await testUnverified();
-  await testCitationsAndLimits();
-  await testCoffeeRegression();
+  try {
+    await testTrue();
+    await testFalse();
+    await testOutOfContext();
+    await testPartlyTrue();
+    await testUnverified();
+    await testCitationsAndLimits();
+    await testReachability();
+    await testCoffeeRegression();
+  } finally {
+    restoreFetch();
+  }
 
   console.log('\n全部 verdict 断言通过');
 }

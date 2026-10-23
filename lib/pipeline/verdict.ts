@@ -32,6 +32,14 @@ const MAX_BODY_CHARS = 80;
 const MAX_SOURCE_TAIL_CHARS = 36;
 /** 摘要中单条来源编号的最大长度 */
 const MAX_CITATION_TOKEN_CHARS = 80;
+/** 链接校验超时（毫秒） */
+const REACH_TIMEOUT_MS = 5_000;
+/** 单一来源时的 headline 提示 */
+const SINGLE_HEADLINE = '仅单一来源，置信度低';
+/** 零来源时的 headline */
+const NO_EVIDENCE_HEADLINE = '我不知道';
+/** 单一来源时置信度上限 */
+const SINGLE_CONFIDENCE_CAP = 0.5;
 
 const TEMPERATURE = 0;
 const TIMEOUT_MS = 60_000;
@@ -49,6 +57,24 @@ const MUTATION_RE =
   /夸大|删去|删除|省略|改为|改写|偷换|断章|曲解|嫁接|篡改|升级为|包装|误读|截取|变成|固化成|伪造/;
 
 const CITATION_RE = /\[([^[\]]{1,80})\]/g;
+
+const TIER_NAMES: Record<Tier, string> = {
+  official: '官方',
+  media: '权威媒体',
+  self: '自媒体',
+  marketing: '营销号',
+  unknown: '未分级',
+};
+
+/** 独立证人数决定的三态底线。 */
+export type EvidenceState = 'multi' | 'single' | 'none';
+
+/** 同一疑点的正反冲突记录。 */
+export type ClaimConflict = {
+  supportIds: string[];
+  refuteIds: string[];
+  resolution: string;
+};
 
 const LEVEL_NAMES: Record<VerdictLevel, string> = {
   true: '属实',
@@ -155,6 +181,7 @@ type ClaimEntry = {
   timeline: TimelineStep[];
   distortion: Distortion;
   rule: RuleVerdict | null;
+  conflict?: ClaimConflict;
 };
 
 function round2(value: number): number {
@@ -292,7 +319,48 @@ export function collectWitnesses(
   sources: Source[],
   groups: SourceGroup[],
 ): Witness[] {
-  return buildWitnesses(claim, sources, indexGroups(groups));
+  return buildWitnesses(
+    claim,
+    sources.filter((source) => source.reachable !== false),
+    indexGroups(groups),
+  );
+}
+
+/** HEAD 失败再 GET，5 秒超时，跟随跳转。 */
+async function probeUrl(url: string): Promise<boolean> {
+  if (!/^https?:\/\//i.test(url)) {
+    return false;
+  }
+
+  for (const method of ['HEAD', 'GET'] as const) {
+    try {
+      const response = await fetch(url, {
+        method,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(REACH_TIMEOUT_MS),
+      });
+      if (response.ok) {
+        return true;
+      }
+    } catch {
+      // HEAD 被拒或超时，换 GET 再试一次
+    }
+  }
+  return false;
+}
+
+/** 链接校验：给每条来源补 reachable，同一 URL 只探测一次。 */
+export async function checkReachability(sources: Source[]): Promise<Source[]> {
+  const urls = [...new Set(sources.map((source) => source.url))];
+  const results = new Map<string, boolean>();
+
+  await Promise.all(
+    urls.map(async (url) => {
+      results.set(url, await probeUrl(url));
+    }),
+  );
+
+  return sources.map((source) => ({ ...source, reachable: results.get(source.url) ?? false }));
 }
 
 /** 时间线首节点是权威来源，且同源后续节点出现传播变形表述时才算走样。 */
@@ -332,6 +400,76 @@ function detectDistortion(
   }
 
   return { detected: mutationCount > 0, headTier, mutationCount };
+}
+
+/** 一方里等级最高的 tier。 */
+function topTierOf(witnesses: Witness[]): Tier {
+  return witnesses.reduce<Tier>(
+    (best, witness) => (TIER_RANK[witness.tier] > TIER_RANK[best] ? witness.tier : best),
+    'unknown',
+  );
+}
+
+/** 一方里最新的发布时间（毫秒），没有可用时间时返回 null。 */
+function latestTimeOf(witnesses: Witness[]): number | null {
+  let latest: number | null = null;
+  for (const witness of witnesses) {
+    const value = witness.source.publishedAt ? Date.parse(witness.source.publishedAt) : Number.NaN;
+    if (Number.isFinite(value) && (latest === null || value > latest)) {
+      latest = value;
+    }
+  }
+  return latest;
+}
+
+function describeSide(witnesses: Witness[], tier: Tier): string {
+  const sites = [
+    ...new Set(
+      witnesses.filter((witness) => witness.tier === tier).map((witness) => witness.source.site),
+    ),
+  ].slice(0, 2);
+  return `${sites.join('、')}（${TIER_NAMES[tier]}）`;
+}
+
+/** 同疑点正反都有独立证人时记录冲突，并给出采信理由。 */
+function buildConflict(
+  supporters: Witness[],
+  refuters: Witness[],
+): { conflict: ClaimConflict; undecided: boolean } | undefined {
+  if (supporters.length === 0 || refuters.length === 0) {
+    return undefined;
+  }
+
+  const supportTier = topTierOf(supporters);
+  const refuteTier = topTierOf(refuters);
+  const supportTime = latestTimeOf(supporters);
+  const refuteTime = latestTimeOf(refuters);
+
+  let resolution: string;
+  let undecided = false;
+  if (TIER_RANK[supportTier] !== TIER_RANK[refuteTier]) {
+    resolution =
+      TIER_RANK[supportTier] > TIER_RANK[refuteTier]
+        ? `采信支持方：${describeSide(supporters, supportTier)}等级高于反驳方的${TIER_NAMES[refuteTier]}`
+        : `采信反驳方：${describeSide(refuters, refuteTier)}等级高于支持方的${TIER_NAMES[supportTier]}`;
+  } else if (supportTime !== null && refuteTime !== null && supportTime !== refuteTime) {
+    resolution =
+      refuteTime > supportTime
+        ? `双方同属${TIER_NAMES[refuteTier]}，反驳方发布时间更晚，按后续更正采信反驳方`
+        : `双方同属${TIER_NAMES[supportTier]}，支持方发布时间更晚，按后续确认采信支持方`;
+  } else {
+    undecided = true;
+    resolution = `双方同属${TIER_NAMES[refuteTier]}且发布时间没有明确先后，无法判断，按无法证实处理`;
+  }
+
+  return {
+    conflict: {
+      supportIds: supporters.map((witness) => witness.source.id),
+      refuteIds: refuters.map((witness) => witness.source.id),
+      resolution,
+    },
+    undecided,
+  };
 }
 
 /** 规则引擎：证据不足一律 unverified，规则优先于模型直觉。 */
@@ -602,10 +740,11 @@ function decideLevel(rule: RuleVerdict | null, draft: ClaimDraft | undefined): R
   return { level: 'unverified', confidence: round2(Math.min(draft.confidence, 0.45)) };
 }
 
-/** 删除摘要里不存在的引用编号，并把真实 id 规范成 [s编号]。 */
+/** 删除摘要里不存在或来源不可达的引用编号，并把真实 id 规范成 [s编号]。 */
 function sanitizeSummary(
   raw: string,
   numbering: Numbering,
+  usableIds: Set<string>,
 ): { summary: string; used: Set<string> } {
   const used = new Set<string>();
   const normalized = raw.replace(/【/g, '[').replace(/】/g, ']');
@@ -614,7 +753,7 @@ function sanitizeSummary(
     .replace(CITATION_RE, (_match: string, token: string) => {
       const trimmed = token.trim().slice(0, MAX_CITATION_TOKEN_CHARS);
       const sourceId = numbering.byToken.get(trimmed);
-      if (!sourceId) {
+      if (!sourceId || !usableIds.has(sourceId)) {
         return '';
       }
       used.add(sourceId);
@@ -682,6 +821,13 @@ function fallbackTail(level: VerdictLevel, witnesses: Witness[]): string {
       return '支持该说法的来源全部出自营销号，没有可信来源支撑';
     }
   }
+  if (level === 'unverified') {
+    const hasSupport = witnesses.some((witness) => witness.stance === 'support');
+    const hasRefute = witnesses.some((witness) => witness.stance === 'refute');
+    if (hasSupport && hasRefute) {
+      return '来源之间互相矛盾，又没有更权威的依据，暂时无法证实';
+    }
+  }
   return LEVEL_TAILS[level];
 }
 
@@ -690,13 +836,18 @@ function buildClaimSummary(
   level: VerdictLevel,
   draft: ClaimDraft | undefined,
   numbering: Numbering,
+  usableIds: Set<string>,
 ): { summary: string; citationIds: string[] } {
-  const sanitized = sanitizeSummary(draft?.summary ?? '', numbering);
-  if (sanitized.summary) {
-    return {
-      summary: sanitized.summary,
-      citationIds: collectCitationIds(sanitized.used, numbering),
-    };
+  // 冲突未决时必须如实说明矛盾，不能再让模型自由发挥
+  const mustExplainConflict = entry.conflict !== undefined && level === 'unverified';
+  if (!mustExplainConflict) {
+    const sanitized = sanitizeSummary(draft?.summary ?? '', numbering, usableIds);
+    if (sanitized.summary) {
+      return {
+        summary: sanitized.summary,
+        citationIds: collectCitationIds(sanitized.used, numbering),
+      };
+    }
   }
 
   const fallback = fallbackSummary(entry.claim, level, entry.witnesses, numbering);
@@ -710,9 +861,10 @@ function finalizeClaim(
   entry: ClaimEntry,
   draft: ClaimDraft | undefined,
   numbering: Numbering,
+  usableIds: Set<string>,
 ): ClaimVerdict {
   const { level, confidence } = decideLevel(entry.rule, draft);
-  const { summary, citationIds } = buildClaimSummary(entry, level, draft, numbering);
+  const { summary, citationIds } = buildClaimSummary(entry, level, draft, numbering, usableIds);
 
   return {
     claimId: entry.claim.id,
@@ -720,6 +872,7 @@ function finalizeClaim(
     confidence,
     summary,
     citationIds,
+    ...(entry.conflict ? { conflict: entry.conflict } : {}),
   };
 }
 
@@ -874,14 +1027,48 @@ function buildEmptyVerdict(): Verdict {
   return VerdictSchema.parse({
     level: 'unverified',
     confidence: 0.1,
-    headline: '没有可核查的事实',
-    summary: '这条消息里没有找到可以核查的具体事实。',
+    evidenceState: 'none',
+    headline: NO_EVIDENCE_HEADLINE,
+    summary: '这条消息里没有找到可以核查的具体事实，也没有可用的检索词和来源，所以无法确认。',
     claims: [],
     rebuttalCard: {
       title: FALLBACK_TITLES.unverified,
       body: composeBody(undefined, [], FALLBACK_BODIES.unverified),
     },
   });
+}
+
+/** 全案独立证人（去重）：≥2 多源，1 单一来源，0 无来源。 */
+function computeEvidenceState(entries: ClaimEntry[]): EvidenceState {
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    for (const witness of entry.witnesses) {
+      if (witness.stance !== 'irrelevant') {
+        ids.add(witness.source.id);
+      }
+    }
+  }
+  if (ids.size >= 2) {
+    return 'multi';
+  }
+  return ids.size === 1 ? 'single' : 'none';
+}
+
+/** 零证人时如实交代查过什么、看了多少、为什么确认不了。 */
+function buildNoEvidenceSummary(claims: Claim[], sources: Source[]): string {
+  const queries = [...new Set(sources.map((source) => source.query.trim()).filter(Boolean))];
+  const queryText = queries.length
+    ? queries.map((query) => `「${clip(query, 24)}」`).join('、')
+    : '（没有可用的检索词）';
+  const claimText = claims.map((claim) => `「${clip(claim.text, 30)}」`).join('、');
+
+  if (sources.length === 0) {
+    return `我按${queryText}检索后没有取到任何来源，围绕${claimText}没有任何可核对的证据，所以无法确认这条消息的真假。`;
+  }
+
+  const unreachable = sources.filter((source) => source.reachable === false).length;
+  const reachText = unreachable > 0 ? `其中 ${unreachable} 条链接打不开` : '链接都能打开';
+  return `我查了${queryText}这些检索词，看了 ${sources.length} 条来源（${reachText}），围绕${claimText}没有找到能直接支撑或反驳的独立来源，所以无法确认这条消息的真假。`;
 }
 
 /**
@@ -899,34 +1086,70 @@ export async function makeVerdict(
     return buildEmptyVerdict();
   }
 
-  const numbering = buildNumbering(sources);
-  const sourcesById = new Map(sources.map((source) => [source.id, source]));
+  // 先校验链接：不可达的来源不参与判决，也不允许被引用
+  const checked = await checkReachability(sources);
+  const reachableById = new Map(checked.map((source) => [source.id, source.reachable === true]));
+  for (const source of sources) {
+    source.reachable = reachableById.get(source.id) ?? false;
+  }
+  const usable = checked.filter((source) => source.reachable === true);
+  const usableIds = new Set(usable.map((source) => source.id));
+
+  const numbering = buildNumbering(checked);
+  const sourcesById = new Map(checked.map((source) => [source.id, source]));
   const groupOf = indexGroups(groups);
 
   const entries: ClaimEntry[] = claims.map((claim) => {
-    const witnesses = buildWitnesses(claim, sources, groupOf);
+    const witnesses = buildWitnesses(claim, usable, groupOf);
     const timeline = timelines[claim.id] ?? [];
     const distortion = detectDistortion(timeline, sourcesById, groupOf);
+    const supporters = witnesses.filter((witness) => witness.stance === 'support');
+    const refuters = witnesses.filter((witness) => witness.stance === 'refute');
+    const conflict = buildConflict(supporters, refuters);
+    const rule = judgeByRules(witnesses, distortion);
+    const undecided = conflict?.undecided === true;
 
     return {
       claim,
       witnesses,
       timeline,
       distortion,
-      rule: judgeByRules(witnesses, distortion),
+      conflict: conflict?.conflict,
+      // 正反双方分不出高下时，任何一方都不能单独定案
+      rule: undecided
+        ? { level: 'unverified', confidence: round2(Math.min(rule?.confidence ?? 0.3, 0.45)) }
+        : rule,
     };
   });
 
   const drafts = await requestClaimDrafts(input, entries, numbering, sourcesById);
   const claimVerdicts = entries.map((entry) =>
-    finalizeClaim(entry, drafts.get(entry.claim.id), numbering),
+    finalizeClaim(entry, drafts.get(entry.claim.id), numbering, usableIds),
   );
 
   const aggregate = aggregateVerdicts(claimVerdicts);
   const overall = await requestOverall(input, claims, claimVerdicts, numbering);
 
-  const summaryResult = sanitizeSummary(overall?.summary ?? '', numbering);
-  const summary = summaryResult.summary || fallbackOverallSummary(claimVerdicts, aggregate.level);
+  const summaryResult = sanitizeSummary(overall?.summary ?? '', numbering, usableIds);
+  const evidenceState = computeEvidenceState(entries);
+
+  let level: VerdictLevel = aggregate.level;
+  let confidence = aggregate.confidence;
+  let headline: string;
+  let summary = summaryResult.summary || fallbackOverallSummary(claimVerdicts, level);
+
+  if (evidenceState === 'none') {
+    level = 'unverified';
+    confidence = round2(Math.min(confidence, 0.1));
+    headline = NO_EVIDENCE_HEADLINE;
+    summary = buildNoEvidenceSummary(claims, checked);
+  } else if (evidenceState === 'single') {
+    headline = SINGLE_HEADLINE;
+    confidence = round2(Math.min(confidence, SINGLE_CONFIDENCE_CAP));
+    summary = `${SINGLE_HEADLINE}，暂无法交叉印证，结论只能按${LEVEL_NAMES[level]}处理。${summary}`;
+  } else {
+    headline = fitHeadline(overall?.headline, level);
+  }
 
   const cited = new Set<string>(summaryResult.used);
   for (const item of claimVerdicts) {
@@ -934,17 +1157,18 @@ export async function makeVerdict(
       cited.add(id);
     }
   }
-  const sites = pickSites(cited, sourcesById, sources);
+  const sites = pickSites(cited, sourcesById, usable);
 
   return VerdictSchema.parse({
-    level: aggregate.level,
-    confidence: aggregate.confidence,
-    headline: fitHeadline(overall?.headline, aggregate.level),
+    level,
+    confidence,
+    evidenceState,
+    headline,
     summary,
     claims: claimVerdicts,
     rebuttalCard: {
-      title: fitTitle(overall?.rebuttalCard.title, aggregate.level),
-      body: composeBody(overall?.rebuttalCard.body, sites, FALLBACK_BODIES[aggregate.level]),
+      title: fitTitle(overall?.rebuttalCard.title, level),
+      body: composeBody(overall?.rebuttalCard.body, sites, FALLBACK_BODIES[level]),
     },
   });
 }
