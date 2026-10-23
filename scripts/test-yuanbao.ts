@@ -13,9 +13,13 @@ async function main(): Promise<void> {
     const withDate = results.filter((item) => item.publishedAt).length;
     const coverage = results.length === 0 ? 0 : Math.round((withDate / results.length) * 100);
 
-    console.log(`\n[${query}] ${results.length} 条，耗时 ${elapsed}ms，publishedAt 覆盖率 ${coverage}%`);
+    console.log(
+      `\n[${query}] ${results.length} 条，耗时 ${elapsed}ms，publishedAt 覆盖率 ${coverage}%`,
+    );
     for (const item of results) {
-      console.log(`- ${item.title} | ${item.site || '(无站点)'} | ${item.publishedAt ?? '(无时间)'}`);
+      console.log(
+        `- ${item.title} | ${item.site || '(无站点)'} | ${item.publishedAt ?? '(无时间)'}`,
+      );
     }
   }
 

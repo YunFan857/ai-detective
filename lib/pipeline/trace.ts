@@ -246,11 +246,7 @@ function parseTime(value: string | undefined): number {
 }
 
 /** 每个同源组取首发源，按时间升序截断，并优先覆盖不同 tier。 */
-function selectTimelineNodes(
-  claim: Claim,
-  sources: Source[],
-  groups: SourceGroup[],
-): Source[] {
+function selectTimelineNodes(claim: Claim, sources: Source[], groups: SourceGroup[]): Source[] {
   const byId = new Map(sources.map((source) => [source.id, source]));
   const seen = new Set<string>();
   const candidates: Source[] = [];
@@ -296,11 +292,7 @@ function selectTimelineNodes(
   return selected.sort((a, b) => parseTime(a.publishedAt) - parseTime(b.publishedAt));
 }
 
-function buildTimelinePrompt(
-  claim: Claim,
-  nodes: Source[],
-  groupIds: Map<string, string>,
-): string {
+function buildTimelinePrompt(claim: Claim, nodes: Source[], groupIds: Map<string, string>): string {
   const rows = nodes
     .map((source, index) => {
       const prev = index > 0 ? nodes[index - 1] : undefined;
@@ -373,7 +365,8 @@ async function requestQuotes(
       timeoutMs: 60_000,
     });
   } catch (error) {
-    const detail = error instanceof Error && error.cause instanceof Error ? error.cause.message : '';
+    const detail =
+      error instanceof Error && error.cause instanceof Error ? error.cause.message : '';
     emit({
       type: 'error',
       message: `疑点 ${claim.id} 时间线生成失败：${(error as Error).message}${detail ? `（${detail}）` : ''}`,

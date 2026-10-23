@@ -296,9 +296,7 @@ export async function gatherEvidence(
   const deps = options.deps ?? defaultDeps;
   const demo = options.demo ?? isDemoMode();
   const budget = createSearchBudget(SEARCH_BUDGET);
-  const plans = await Promise.all(
-    claims.map((claim) => planClaimQueries(claim, emit, deps, demo)),
-  );
+  const plans = await Promise.all(claims.map((claim) => planClaimQueries(claim, emit, deps, demo)));
 
   const tasks: QueryTask[] = [];
 
@@ -350,7 +348,8 @@ export async function gatherEvidence(
 
   for (const claim of claims) {
     const seen = new Set<string>();
-    const candidates: { result: SearchResult; task: QueryTask; score: number; order: number }[] = [];
+    const candidates: { result: SearchResult; task: QueryTask; score: number; order: number }[] =
+      [];
     let order = 0;
 
     for (const task of tasks.filter((item) => item.claim.id === claim.id)) {

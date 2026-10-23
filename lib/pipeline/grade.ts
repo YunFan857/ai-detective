@@ -102,7 +102,10 @@ ${rows}
 {"results":[{"id":"来源 id","stance":"support|refute|irrelevant","tier":"official|media|self|marketing|unknown","reason":"一句理由"}]}`;
 }
 
-async function gradeBatch(batch: Batch, emit: (event: CaseEvent) => void): Promise<Map<string, Grade>> {
+async function gradeBatch(
+  batch: Batch,
+  emit: (event: CaseEvent) => void,
+): Promise<Map<string, Grade>> {
   const knownTiers = new Map(
     batch.items.map((source) => [source.id, tierByDomain(source.url) ?? tierByDomain(source.site)]),
   );

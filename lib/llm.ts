@@ -170,13 +170,7 @@ async function requestCompletion(
  * 校验失败会把错误回传给模型重试（最多 2 次）；超时重试 1 次。
  */
 export async function chatJSON<T>(options: ChatJsonOptions<T>): Promise<T> {
-  const {
-    system,
-    user,
-    schema,
-    temperature = 0.2,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-  } = options;
+  const { system, user, schema, temperature = 0.2, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
 
   const messages: ChatMessage[] = [
     { role: 'system', content: `${system}\n\n${JSON_ONLY_INSTRUCTION}` },

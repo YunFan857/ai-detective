@@ -71,7 +71,9 @@ function readConfig(): YuanbaoConfig {
 }
 
 function cacheFile(query: string, cnt: number | undefined): string {
-  const hash = createHash('sha1').update(`${query}\u0000${cnt ?? ''}`).digest('hex');
+  const hash = createHash('sha1')
+    .update(`${query}\u0000${cnt ?? ''}`)
+    .digest('hex');
   return path.join(CACHE_DIR, `${hash}.json`);
 }
 
@@ -119,7 +121,12 @@ async function readCache(file: string): Promise<SearchResult[] | null> {
   }
 }
 
-async function writeCache(file: string, query: string, cnt: number | undefined, results: SearchResult[]): Promise<void> {
+async function writeCache(
+  file: string,
+  query: string,
+  cnt: number | undefined,
+  results: SearchResult[],
+): Promise<void> {
   const data: CacheFile = {
     query,
     cnt: cnt ?? null,
@@ -170,7 +177,11 @@ function parsePage(raw: unknown): SearchResult | null {
     site: typeof item.site === 'string' ? item.site : '',
     title: typeof item.title === 'string' ? item.title : '',
     snippet:
-      typeof item.passage === 'string' ? item.passage : typeof item.content === 'string' ? item.content : '',
+      typeof item.passage === 'string'
+        ? item.passage
+        : typeof item.content === 'string'
+          ? item.content
+          : '',
     publishedAt: toIsoString(item.date),
   };
 }
@@ -245,9 +256,7 @@ async function requestOnce(
       return [];
     }
 
-    return pages
-      .map(parsePage)
-      .filter((item): item is SearchResult => item !== null);
+    return pages.map(parsePage).filter((item): item is SearchResult => item !== null);
   } catch (error) {
     if (error instanceof YuanbaoError) {
       throw error;
@@ -296,7 +305,9 @@ export async function search(query: string, options: SearchOptions = {}): Promis
     return cached;
   }
 
-  const results = await concurrency(() => requestWithRetry(query, options.cnt, config, options.signal));
+  const results = await concurrency(() =>
+    requestWithRetry(query, options.cnt, config, options.signal),
+  );
   await writeCache(file, query, options.cnt, results);
   return results;
 }

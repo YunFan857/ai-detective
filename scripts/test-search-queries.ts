@@ -50,7 +50,10 @@ async function main(): Promise<void> {
   // 1. 正常 {pro, con} 输出
   {
     const deps = createDeps([
-      { pro: ['秦始皇陵 水银 证据', '秦始皇陵 未发掘 原因'], con: ['秦始皇陵 水银 辟谣', '秦始皇陵 真相 原文 出处'] },
+      {
+        pro: ['秦始皇陵 水银 证据', '秦始皇陵 未发掘 原因'],
+        con: ['秦始皇陵 水银 辟谣', '秦始皇陵 真相 原文 出处'],
+      },
     ]);
     const events: CaseEvent[] = [];
     const plan = await planClaimQueries(CLAIM, (event) => events.push(event), deps, true);
@@ -71,7 +74,10 @@ async function main(): Promise<void> {
   // 1b. 非演示模式取 2 条 pro + 2 条 con
   {
     const deps = createDeps([
-      { pro: ['秦始皇陵 水银 证据', '秦始皇陵 未发掘 原因'], con: ['秦始皇陵 水银 辟谣', '秦始皇陵 真相 原文 出处'] },
+      {
+        pro: ['秦始皇陵 水银 证据', '秦始皇陵 未发掘 原因'],
+        con: ['秦始皇陵 水银 辟谣', '秦始皇陵 真相 原文 出处'],
+      },
     ]);
     const plan = await planClaimQueries(CLAIM, () => {}, deps, false);
     check('非演示模式取 2 条 pro + 2 条 con', plan.pro.length === 2 && plan.con.length === 2);
@@ -162,9 +168,7 @@ async function main(): Promise<void> {
     ];
     let total = 0;
     for (const claim of claims) {
-      const deps = createDeps([
-        { pro: ['证据一', '证据二'], con: ['辟谣一', '真相一', '多余'], },
-      ]);
+      const deps = createDeps([{ pro: ['证据一', '证据二'], con: ['辟谣一', '真相一', '多余'] }]);
       const plan = await planClaimQueries(claim, () => {}, deps, true);
       total += plan.pro.length + plan.con.length;
     }

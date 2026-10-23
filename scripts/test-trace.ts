@@ -110,7 +110,9 @@ async function runCoffeeCase(): Promise<void> {
     console.log(`\n## ${claim.id} ${claim.text}（${steps.length} 步）`);
     steps.forEach((step, index) => {
       const source = graded.find((item) => item.id === step.sourceId);
-      console.log(`${index + 1}. [${step.publishedAt ?? '无时间'}] ${source?.site ?? '-'} ${source?.title ?? ''}`);
+      console.log(
+        `${index + 1}. [${step.publishedAt ?? '无时间'}] ${source?.site ?? '-'} ${source?.title ?? ''}`,
+      );
       console.log(`   quote: ${step.quote}`);
       console.log(`   mutation: ${step.mutation ?? '（首节点）'}`);
     });

@@ -152,7 +152,10 @@ function expectedOrigin(group: SourceGroup, sources: Source[]): Source | undefin
   )[0];
 }
 
-function printTable(sources: Source[], updates: Map<string, { groupId?: string; isOrigin?: boolean }>): void {
+function printTable(
+  sources: Source[],
+  updates: Map<string, { groupId?: string; isOrigin?: boolean }>,
+): void {
   const header = ['sourceId', 'claimId', 'stance', 'tier', 'groupId', 'isOrigin'];
   const rows = sources.map((source) => [
     source.id,
@@ -183,14 +186,20 @@ function checkIntegrity(label: string, sources: Source[], result: RunResult): vo
     groups.filter((group) => group.memberIds.length > 0).length === groups.length &&
       memberIds.length === sources.length &&
       new Set(memberIds).size === sources.length &&
-      sources.every((source) => updateCount.get(source.id) === 1 && !!updates.get(source.id)?.groupId),
+      sources.every(
+        (source) => updateCount.get(source.id) === 1 && !!updates.get(source.id)?.groupId,
+      ),
   );
 
   const claimDrift = groups.filter((group) => {
     const members = sources.filter((source) => group.memberIds.includes(source.id));
     return members.some((source) => source.claimId !== group.claimId);
   });
-  check(`${label}每个组的成员 claimId 与组一致`, claimDrift.length === 0, claimDrift.map((g) => g.id).join(', '));
+  check(
+    `${label}每个组的成员 claimId 与组一致`,
+    claimDrift.length === 0,
+    claimDrift.map((g) => g.id).join(', '),
+  );
 
   const originMismatch = groups.filter(
     (group) =>
@@ -259,14 +268,19 @@ async function main(): Promise<void> {
     );
   }
 
-  const wrongSplit = EXPECT_DIFFERENT.filter(([left, right]) => groupIdOf(left) === groupIdOf(right));
+  const wrongSplit = EXPECT_DIFFERENT.filter(
+    ([left, right]) => groupIdOf(left) === groupIdOf(right),
+  );
   check(
     '未达阈值的洗稿对保持独立组',
     wrongSplit.length === 0,
     wrongSplit.map(([left, right]) => `${left}=${right}`).join(', '),
   );
 
-  check('洗稿组按疑点隔离（c2 / c3 两组互不合并）', groupIdOf('src_marketing_04') !== groupIdOf('src_wash_06'));
+  check(
+    '洗稿组按疑点隔离（c2 / c3 两组互不合并）',
+    groupIdOf('src_marketing_04') !== groupIdOf('src_wash_06'),
+  );
 
   const officialGroup = groups.find((group) => group.memberIds.includes(OFFICIAL_ONLY));
   check(
@@ -276,14 +290,13 @@ async function main(): Promise<void> {
   );
 
   const washGroupId = groupIdOf('src_marketing_04');
-  check(
-    '官方辟谣未并入营销洗稿组',
-    washGroupId !== 'missing' && washGroupId !== officialGroup?.id,
-  );
+  check('官方辟谣未并入营销洗稿组', washGroupId !== 'missing' && washGroupId !== officialGroup?.id);
 
   const independent = countIndependent(groups, sources);
   const irrelevantOnly = groups.filter((group) =>
-    group.memberIds.every((id) => sources.find((source) => source.id === id)?.stance === 'irrelevant'),
+    group.memberIds.every(
+      (id) => sources.find((source) => source.id === id)?.stance === 'irrelevant',
+    ),
   );
   check(
     'countIndependent 排除全为 irrelevant 的组',
@@ -318,10 +331,15 @@ async function main(): Promise<void> {
 
   console.log(
     `\nSIGNATURE ${groups
-      .map((group) => `${group.id}:${group.claimId}:${group.originSourceId}:${group.memberIds.join(',')}`)
+      .map(
+        (group) =>
+          `${group.id}:${group.claimId}:${group.originSourceId}:${group.memberIds.join(',')}`,
+      )
       .join(' ; ')}`,
   );
-  console.log(`\n模型调用 ${llmStats.calls} 次，tokens ${llmStats.tokens}，耗时 ${Date.now() - startedAt}ms`);
+  console.log(
+    `\n模型调用 ${llmStats.calls} 次，tokens ${llmStats.tokens}，耗时 ${Date.now() - startedAt}ms`,
+  );
 
   if (failures.length > 0) {
     console.error(`\n失败 ${failures.length} 项：${failures.join('；')}`);
