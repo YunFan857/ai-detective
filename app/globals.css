@@ -22,6 +22,10 @@
   --color-gray-soft: #f2f3f5;
   --color-bg: #f2fbf6;
 
+  /* 证据图谱画布与「新!」贴纸 */
+  --color-canvas: #fafffc;
+  --color-highlight: #ffd84d;
+
   /* 旧 token 别名：与元宝色板对齐，避免历史页面出现两套配色 */
   --color-brand-deep: #00813f;
   --color-coral: #d54941;
@@ -208,6 +212,20 @@ body {
   animation: caret-blink 1s steps(1) infinite;
 }
 
+/* 图谱新连线：400ms 内从起点画到终点（配合 SVG pathLength=1） */
+@keyframes graph-edge-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.graph-edge-draw {
+  animation: graph-edge-draw 400ms ease-out forwards;
+}
+
 @media (max-width: 640px) {
   .ink-title {
     -webkit-text-stroke-width: 5px;
@@ -222,7 +240,8 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .wave-bar,
-  .typewriter-caret {
+  .typewriter-caret,
+  .graph-edge-draw {
     animation: none;
   }
 }

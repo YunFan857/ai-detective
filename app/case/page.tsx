@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, use, useEffect } from 'react';
+import { Suspense, use, useEffect, useMemo } from 'react';
 import { CaseHeader } from '@/components/case/case-header';
 import { EvidenceGraph } from '@/components/case/evidence-graph';
 import { ProgressFeed } from '@/components/progress-feed';
@@ -92,6 +92,19 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   const input = state.input || text || '';
   const modeLabel = MODE_LABELS[mode ?? 'mock'] ?? '文字立案';
 
+  const claim = state.claims[0] ?? null;
+  const claimSources = useMemo(() => {
+    if (!claim) return [];
+    return state.sourceOrder
+      .map((id) => state.sourcesById[id])
+      .filter((source) => source.claimId === claim.id);
+  }, [claim, state.sourceOrder, state.sourcesById]);
+  const claimGroups = useMemo(
+    () => (claim ? state.groups.filter((group) => group.claimId === claim.id) : []),
+    [claim, state.groups],
+  );
+  const revealStep = (step: StepIndex): StepId | 0 => (step === 0 ? 0 : toStepId(step));
+
   return (
     <main className="flex h-dvh min-h-[720px] min-w-[1280px] flex-col overflow-hidden bg-paper text-ink">
       <CaseHeader
@@ -112,12 +125,12 @@ function CaseContent({ searchParams }: CaseSearchParams) {
         />
 
         <EvidenceGraph
-          claims={state.claims}
-          sourcesById={state.sourcesById}
-          sourceOrder={state.sourceOrder}
-          groups={state.groups}
-          activeStep={activeStep}
-          closed={closed}
+          claim={claim}
+          sources={claimSources}
+          groups={claimGroups}
+          timeline={claim ? state.timelines[claim.id] : undefined}
+          revealedStep={revealStep(reveal.revealedStep)}
+          viewStep={revealStep(reveal.viewStep)}
         />
       </div>
 
