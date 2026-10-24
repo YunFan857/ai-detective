@@ -1,14 +1,14 @@
-import type { Stats } from '@/types/case';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { LinkIcon } from '@/components/ui/icons';
+import { StatsBar } from '@/components/stats-bar';
 import { stepById, type StepId } from '@/lib/steps';
-import { StatsBar } from '@/components/case/stats-bar';
+import type { InvestigationState } from '@/lib/use-investigation';
 
 export type CaseHeaderProps = {
   caseId: string | null;
   input: string;
   modeLabel: string;
-  stats: Stats | null;
+  state: InvestigationState;
   activeStep: StepId;
   closed: boolean;
 };
@@ -18,7 +18,7 @@ export function CaseHeader({
   caseId,
   input,
   modeLabel,
-  stats,
+  state,
   activeStep,
   closed,
 }: CaseHeaderProps) {
@@ -46,7 +46,7 @@ export function CaseHeader({
         {input || '等待原始消息…'}
       </p>
 
-      <StatsBar stats={stats} />
+      <StatsBar state={state} />
 
       <span
         aria-live="polite"

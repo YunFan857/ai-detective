@@ -158,7 +158,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
         caseId={state.caseId}
         input={input}
         modeLabel={modeLabel}
-        stats={state.stats}
+        state={state}
         activeStep={activeStep}
         closed={closed}
       />
