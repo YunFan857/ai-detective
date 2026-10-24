@@ -1,4 +1,12 @@
-import type { Claim, Source, Stance, Stage, Tier, VerdictLevel } from '@/types/case';
+import type {
+  Claim,
+  ClaimCategory,
+  Source,
+  Stance,
+  Stage,
+  Tier,
+  VerdictLevel,
+} from '@/types/case';
 
 /**
  * 枚举 → 中文与配色的唯一映射。
@@ -185,6 +193,18 @@ export const CLAIM_KIND_LABELS: Record<Claim['kind'], string> = {
   other: '其他',
 };
 
+/** 疑点类别：文案体检卡片上显示「高风险 · 数字」这类标签。 */
+export const CLAIM_CATEGORY_LABELS: Record<ClaimCategory, string> = {
+  person: '人物',
+  time: '时间',
+  place: '地点',
+  number: '数字',
+  quote: '引语',
+  causal: '因果',
+  superlative: '绝对化',
+  other: '其他',
+};
+
 /** 疑点风险等级：拆疑点确认页用来提示先查哪几条。 */
 export const RISK_META: Record<NonNullable<Claim['riskLevel']>, ToneMeta> = {
   high: {
@@ -294,4 +314,8 @@ export function stanceLabel(stance: Stance): string {
 
 export function claimKindLabel(kind: Claim['kind']): string {
   return CLAIM_KIND_LABELS[kind];
+}
+
+export function claimCategoryLabel(category: ClaimCategory): string {
+  return CLAIM_CATEGORY_LABELS[category];
 }

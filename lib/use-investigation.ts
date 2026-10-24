@@ -6,9 +6,11 @@ import demoEventsJson from '@/mock/events-demo.json';
 import { playEvents, type PlayableEvent } from '@/lib/mock-stream';
 import {
   CaseEventSchema,
+  type Billing,
   type CaseEvent,
   type CaseFile,
   type Claim,
+  type Mode,
   type Source,
   type SourceGroup,
   type Stage,
@@ -65,6 +67,10 @@ export type InvestigationState = {
   timelines: Record<string, TimelineStep[]>;
   verdict: Verdict | null;
   stats: Stats | null;
+  /** 逐个疑点的处理状态；文案体检选完后由 SSE 推送。 */
+  claimProgress: Record<string, 'queued' | 'searching' | 'grading' | 'done'>;
+  /** 服务端结算结果；billing 事件优先，done.caseFile.billing 兜底。 */
+  billing: Billing | null;
   errors: string[];
   /** 终止本次调查的原因；running/done 时为 null。 */
   failure: InvestigationFailure | null;
@@ -82,6 +88,16 @@ export type StartOptions =
       /** 已确认的拆疑点预览；传入后跳过视觉转写，只深查选中的疑点。 */
       previewId?: string;
       selectedClaimIds?: string[];
+    }
+  | {
+      /** 已确认预览的文案 / 消息查证：mode 是业务模式，不是 mock/real/demo。 */
+      flow: 'preview';
+      mode: Mode;
+      inputType: 'text';
+      /** preview 失效时的展示兜底；服务端以 previewId 为准。 */
+      text?: string;
+      previewId: string;
+      selectedClaimIds: string[];
     };
 
 export type InvestigationController = {
@@ -107,6 +123,8 @@ const INITIAL_STATE: InvestigationState = {
   timelines: {},
   verdict: null,
   stats: null,
+  claimProgress: {},
+  billing: null,
   errors: [],
   failure: null,
 };
@@ -160,6 +178,16 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
 
     case 'claims':
       return { ...state, claims: event.claims };
+
+    case 'claim_progress':
+      return {
+        ...state,
+        claimProgress: { ...state.claimProgress, [event.claimId]: event.status },
+      };
+
+    case 'billing':
+      // billing 事件与 done.caseFile.billing 可能重复到达；以事件为准，幂等覆盖。
+      return { ...state, billing: event.billing };
 
     case 'source': {
       const known = state.sourceOrder.includes(event.source.id);
@@ -235,6 +263,8 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
         timelines: event.caseFile.timelines,
         verdict: event.caseFile.verdict,
         stats: event.caseFile.stats,
+        // billing 事件已先到则保留；只有没收到事件时才用卷宗兜底。
+        billing: state.billing ?? event.caseFile.billing ?? null,
         errors: [],
         failure: null,
       };
@@ -272,6 +302,7 @@ type StreamOptions = Exclude<StartOptions, { mode: 'mock' }>;
 
 type RequestBody = {
   demoId?: string;
+  mode?: Mode;
   inputType?: 'text' | 'link' | 'image';
   text?: string;
   url?: string;
@@ -281,6 +312,17 @@ type RequestBody = {
 };
 
 function toRequestBody(options: StreamOptions): RequestBody {
+  if ('flow' in options && options.flow === 'preview') {
+    // 业务模式必须显式传给服务端；不能把 mock/real/demo 当成 factcheck/scriptcheck。
+    return {
+      mode: options.mode,
+      inputType: 'text',
+      ...(options.text ? { text: options.text } : {}),
+      previewId: options.previewId,
+      selectedClaimIds: options.selectedClaimIds,
+    };
+  }
+
   if (options.mode === 'demo') {
     return { demoId: options.demoId };
   }
@@ -510,13 +552,17 @@ export function useInvestigation(): InvestigationController {
   const start = useCallback((options: StartOptions) => {
     stopRef.current?.();
     stopRef.current = null;
+
+    const isPreviewFlow = 'flow' in options && options.flow === 'preview';
     dispatch({
       type: 'start',
       inputImage:
-        options.mode === 'real' && options.inputType === 'image' ? options.image : undefined,
+        !isPreviewFlow && options.mode === 'real' && options.inputType === 'image'
+          ? options.image
+          : undefined,
     });
 
-    if (options.mode === 'mock') {
+    if (!isPreviewFlow && options.mode === 'mock') {
       const cancel = playEvents(
         DEMO_EVENTS,
         (event) => dispatch({ type: 'event', event, at: Date.now() }),

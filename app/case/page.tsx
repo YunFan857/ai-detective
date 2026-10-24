@@ -8,11 +8,17 @@ import { ClaimReviewDialog } from '@/components/case/claim-review-dialog';
 import { EvidenceGraph } from '@/components/case/evidence-graph';
 import { ImageFailureDialog } from '@/components/case/image-failure-dialog';
 import { InterruptedBanner } from '@/components/case/interrupted-banner';
+import { ClaimsStateCard } from '@/components/claims/claims-state-card';
 import { ProgressFeed } from '@/components/progress-feed';
 import { ShareCardDialog } from '@/components/share-card';
 import { StepButtons } from '@/components/step-buttons';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { VerdictPanel } from '@/components/verdict-panel';
+import {
+  clearClaimsHandoff,
+  readClaimsHandoff,
+  type ClaimsHandoff,
+} from '@/lib/claims-intake';
 import type { StepId } from '@/lib/steps';
 import {
   useInvestigation,
@@ -146,6 +152,8 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   const demoId = first(params.demoId);
   const inputParam = first(params.input);
   const imageMode = mode === 'real' && inputParam === 'image';
+  /** 文案体检用独立 flow 参数，不和 mock/real/demo 混用。 */
+  const scriptcheckFlow = first(params.flow) === 'scriptcheck';
 
   const [verdictOpen, setVerdictOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -153,6 +161,8 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   const [review, setReview] = useState<ReviewState | null>(
     imageMode ? { status: 'loading' } : null,
   );
+  const [handoffMissing, setHandoffMissing] = useState(false);
+  const [scriptInput, setScriptInput] = useState('');
   const [focusRequest, setFocusRequest] = useState<{
     sourceId: string;
     nonce: number;
@@ -161,9 +171,25 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   const imageRef = useRef<string | null>(null);
   /** 用户确认过的疑点；「重新调查」用它直接深查，不再重跑识别。 */
   const confirmedRef = useRef<{ previewId: string; selectedClaimIds: string[] } | null>(null);
+  /** 文案体检的已确认预览；只读一次，刷新后不重复开查。 */
+  const handoffRef = useRef<ClaimsHandoff | null>(null);
 
   /** 按当前 URL 参数开案；图片先走拆疑点，确认后再深查。 */
   const startCase = useCallback(() => {
+    if (scriptcheckFlow) {
+      const handoff = handoffRef.current;
+      if (!handoff) return;
+      start({
+        flow: 'preview',
+        mode: 'scriptcheck',
+        inputType: 'text',
+        text: handoff.input,
+        previewId: handoff.previewId,
+        selectedClaimIds: handoff.selectedClaimIds,
+      });
+      return;
+    }
+
     if (mode === 'demo' && demoId) {
       start({ mode: 'demo', demoId });
       return;
@@ -190,9 +216,51 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     }
 
     start({ mode: 'mock' });
-  }, [demoId, imageMode, mode, start, text]);
+  }, [demoId, imageMode, mode, scriptcheckFlow, start, text]);
 
   useEffect(() => {
+    if (scriptcheckFlow) {
+      // StrictMode 第二次执行直接用内存里的交接，不再读一次会话存储。
+      if (handoffRef.current) {
+        const restored = handoffRef.current.input;
+        let cancelled = false;
+        // 推迟到微任务再开查：StrictMode 首轮 effect 的清理会取消这次调度，
+        // 只有第二轮真正执行，避免一次操作发出两次查证请求。
+        queueMicrotask(() => {
+          if (cancelled) return;
+          setScriptInput(restored);
+          startCase();
+        });
+        return () => {
+          cancelled = true;
+        };
+      }
+
+      const handoff = readClaimsHandoff();
+      if (!handoff) {
+        let cancelled = false;
+        queueMicrotask(() => {
+          if (!cancelled) setHandoffMissing(true);
+        });
+        return () => {
+          cancelled = true;
+        };
+      }
+
+      // 读取后立即删除：刷新或前进后退不会重复开查、重复扣费。
+      clearClaimsHandoff();
+      handoffRef.current = handoff;
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setScriptInput(handoff.input);
+        startCase();
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!imageMode) {
       startCase();
       return;
@@ -272,7 +340,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     })();
 
     return () => controller.abort();
-  }, [imageMode, router, startCase]);
+  }, [imageMode, router, scriptcheckFlow, startCase]);
 
   // 第 5 步揭示时自动弹出一次；之后由底部「结案！」按钮重新打开。
   useEffect(() => {
@@ -284,8 +352,12 @@ function CaseContent({ searchParams }: CaseSearchParams) {
 
   const activeStep = toStepId(reveal.viewStep);
   const closed = state.status === 'done';
-  const input = state.input || text || '';
-  const modeLabel = imageMode ? '图片立案' : (MODE_LABELS[mode ?? 'mock'] ?? '文字立案');
+  const input = state.input || text || scriptInput || '';
+  const modeLabel = scriptcheckFlow
+    ? '文案体检'
+    : imageMode
+      ? '图片立案'
+      : (MODE_LABELS[mode ?? 'mock'] ?? '文字立案');
   /** 图片识别失败或服务端不可恢复错误：交给专用弹窗，不再整页报错。 */
   const imageFailure =
     imageMode &&
@@ -416,6 +488,30 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     });
   }, [review, start]);
 
+  if (scriptcheckFlow && (handoffMissing || httpFailure)) {
+    const expired =
+      handoffMissing || httpFailure?.status === 404 || httpFailure?.status === 400;
+    return (
+      <main className="flex h-dvh min-h-[720px] min-w-[1280px] flex-col overflow-hidden bg-paper text-ink">
+        <ClaimsStateCard
+          mood="yawn"
+          eyebrow="文案体检 · 查证未开始"
+          title={expired ? '疑点清单已失效' : '查证没有开始'}
+          description={
+            expired
+              ? '刚才确认的疑点没有保存住，或预览已过期。回到文案体检重新分析一次，再勾选要查的项目。'
+              : '服务端没有接受这次查证请求，请重新体检后再试。'
+          }
+          detail={httpFailure ? `错误代码：HTTP ${httpFailure.status}` : undefined}
+          primaryLabel="重新体检"
+          onPrimary={() => router.push('/claims')}
+          secondaryLabel="返回首页"
+          onSecondary={() => router.push('/')}
+        />
+      </main>
+    );
+  }
+
   if (httpFailure) {
     return (
       <main className="flex h-dvh min-h-[720px] min-w-[1280px] flex-col overflow-hidden bg-paper text-ink">
@@ -446,9 +542,15 @@ function CaseContent({ searchParams }: CaseSearchParams) {
       <div className="flex min-h-0 flex-1 gap-3 p-3">
         <ErrorBoundary label="办案实况" className="w-[300px] shrink-0">
           <ProgressFeed
-            sourceLabel={imageMode ? '截图识别' : resolveSourceLabel(input)}
-            sourceTitle={imageMode ? undefined : resolveSourceTitle(input, state)}
-            sourceImage={imageMode ? (state.inputImage ?? undefined) : undefined}
+            sourceLabel={
+              scriptcheckFlow ? '文案原文' : imageMode ? '截图识别' : resolveSourceLabel(input)
+            }
+            sourceTitle={
+              scriptcheckFlow || imageMode ? undefined : resolveSourceTitle(input, state)
+            }
+            sourceImage={
+              !scriptcheckFlow && imageMode ? (state.inputImage ?? undefined) : undefined
+            }
             state={state}
             reveal={reveal}
           />

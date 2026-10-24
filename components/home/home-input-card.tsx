@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState, type ComponentType, type SVGProps } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  CLAIMS_CHECK_HOME,
+  SCRIPTCHECK_MAX,
+  SCRIPTCHECK_MIN,
+  readClaimsDraft,
+  writeClaimsDraft,
+} from '@/lib/claims-intake';
 import { SpeechBubble } from '@/components/ui/speech-bubble';
 import {
   CameraIcon,
@@ -94,11 +101,18 @@ export function HomeInputCard() {
   const searchParams = useSearchParams();
   const noticeCode = searchParams.get('notice');
   const notice = noticeCode ? HOME_NOTICES[noticeCode] : undefined;
+  const intakeParam = searchParams.get('intake');
+  /** 业务模式与输入方式分开：文案体检先免费预检，消息查证直接立案。 */
+  const [business, setBusiness] = useState<'factcheck' | 'scriptcheck'>(
+    intakeParam === 'scriptcheck' ? 'scriptcheck' : 'factcheck',
+  );
+  const scriptcheck = business === 'scriptcheck';
   const [mode, setMode] = useState<Mode>(noticeCode ? 'image' : 'text');
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [locked, setLocked] = useState(false);
   const [listening, setListening] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [file, setFile] = useState<{
     raw: File;
     name: string;
@@ -115,6 +129,22 @@ export function HomeInputCard() {
       if (file?.preview) URL.revokeObjectURL(file.preview);
     };
   }, [file]);
+
+  // 从文案体检返回编辑时回填原文；只读一次，不改动用户当前正在输入的内容。
+  useEffect(() => {
+    if (intakeParam !== 'scriptcheck') return;
+    let cancelled = false;
+    const draft = readClaimsDraft();
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setBusiness('scriptcheck');
+      setMode('text');
+      if (draft) setText(draft.text);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [intakeParam]);
 
   const acceptFile = useCallback((next: File | undefined) => {
     if (!next) return;
@@ -157,21 +187,34 @@ export function HomeInputCard() {
   })();
 
   const trimmedText = text.trim();
-  const textTooShort = trimmedText.length > 0 && trimmedText.length < TEXT_MIN;
-  const textTooLong = trimmedText.length > TEXT_LIMIT;
+  const textLimit = scriptcheck ? SCRIPTCHECK_MAX : TEXT_LIMIT;
+  const textMin = scriptcheck ? SCRIPTCHECK_MIN : TEXT_MIN;
+  const textTooShort = trimmedText.length > 0 && trimmedText.length < textMin;
+  const textTooLong = trimmedText.length > textLimit;
   /** 文本模式的校验提示：太短或太长时按钮禁用并说明原因。 */
   const textHint = textTooLong
-    ? `最多 ${TEXT_LIMIT} 个字，当前 ${trimmedText.length} 字`
+    ? `最多 ${textLimit} 个字，当前 ${trimmedText.length} 字`
     : textTooShort
-      ? `至少 ${TEXT_MIN} 个字，还差 ${TEXT_MIN - trimmedText.length} 个字`
+      ? `至少 ${textMin} 个字，还差 ${textMin - trimmedText.length} 个字`
       : null;
   const canSubmit =
-    (mode === 'text' && !textHint && trimmedText.length >= TEXT_MIN) ||
-    (mode === 'link' && host.length > 0) ||
-    (mode === 'image' && file !== null);
+    (mode === 'text' && !textHint && trimmedText.length >= textMin) ||
+    (!scriptcheck && mode === 'link' && host.length > 0) ||
+    (!scriptcheck && mode === 'image' && file !== null);
+  const visibleModes = scriptcheck ? MODES.filter((item) => item.id === 'text') : MODES;
 
   async function handleSubmit() {
     if (!canSubmit || submitting) return;
+
+    if (scriptcheck) {
+      setFormError(null);
+      if (!writeClaimsDraft(trimmedText)) {
+        setFormError('浏览器会话存储不可用，无法进入文案体检，请检查隐私设置后重试');
+        return;
+      }
+      router.push(CLAIMS_CHECK_HOME);
+      return;
+    }
 
     if (mode === 'image' && file) {
       setSubmitting(true);
@@ -236,13 +279,60 @@ export function HomeInputCard() {
           </p>
         ) : null}
 
+        {/* 业务模式：消息查证 / 文案体检 */}
+        <div className="mb-3 rounded-xl border-2 border-ink bg-beige p-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div role="tablist" aria-label="业务模式" className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!scriptcheck}
+                onClick={() => {
+                  setBusiness('factcheck');
+                  setFormError(null);
+                }}
+                className={`rounded-lg border-2 border-ink px-3 py-1 text-xs font-black transition-transform ${
+                  scriptcheck
+                    ? 'bg-card text-ink hover:-translate-y-0.5'
+                    : 'bg-brand text-white shadow-ink-sm [text-shadow:1px_1px_0_var(--color-ink)]'
+                }`}
+              >
+                📰 消息查证
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={scriptcheck}
+                onClick={() => {
+                  setBusiness('scriptcheck');
+                  setMode('text');
+                  setFormError(null);
+                }}
+                className={`relative rounded-lg border-2 border-ink px-3 py-1 text-xs font-black transition-transform ${
+                  scriptcheck
+                    ? 'bg-brand text-white shadow-ink-sm [text-shadow:1px_1px_0_var(--color-ink)]'
+                    : 'bg-card text-ink hover:-translate-y-0.5'
+                }`}
+              >
+                🎬 文案体检
+                <span className="absolute -top-2 -right-2 rotate-3 rounded border border-ink bg-tangerine px-1 py-px text-[9px] font-black text-white">
+                  免费
+                </span>
+              </button>
+            </div>
+            <p className="ml-auto text-[10px] font-bold text-muted">
+              {scriptcheck ? '50–1500 字 · 先找疑点，再决定查哪些' : '4–500 字 · 直接立案查证'}
+            </p>
+          </div>
+        </div>
+
         {/* 输入方式 */}
         <div
           role="tablist"
           aria-label="输入方式"
           className="flex flex-wrap items-center gap-2 pr-16 sm:gap-2.5"
         >
-          {MODES.map((item) => {
+          {visibleModes.map((item) => {
             const active = mode === item.id;
             return (
               <button
@@ -273,10 +363,17 @@ export function HomeInputCard() {
             <div className="relative rounded-2xl border-2 border-ink bg-card p-4">
               <textarea
                 value={text}
-                onChange={(event) => setText(event.target.value)}
+                onChange={(event) => {
+                  setText(event.target.value);
+                  setFormError(null);
+                }}
                 rows={3}
-                aria-label="要查证的消息"
-                placeholder="把朋友圈、家族群里那条可疑消息贴进来……"
+                aria-label={scriptcheck ? '要体检的文案' : '要查证的消息'}
+                placeholder={
+                  scriptcheck
+                    ? '把整段口播、带货文案或文章贴进来，先免费找疑点……'
+                    : '把朋友圈、家族群里那条可疑消息贴进来……'
+                }
                 className="block w-full resize-none bg-transparent pb-8 text-[15px] leading-8 outline-none placeholder:text-muted/80"
               />
               <span
@@ -284,7 +381,7 @@ export function HomeInputCard() {
                   textHint ? 'text-coral' : 'text-muted'
                 }`}
               >
-                {text.length} / {TEXT_LIMIT}
+                {text.length} / {textLimit}
                 {textHint ? ` · ${textHint}` : ''}
               </span>
 
@@ -452,12 +549,21 @@ export function HomeInputCard() {
                 role="status"
                 className="mr-auto flex items-center gap-1.5 text-xs font-black text-coral"
               >
-                ⚠️ {textHint}，暂不能立案
+                ⚠️ {textHint}，暂不能{scriptcheck ? '体检' : '立案'}
               </p>
             ) : (
               <p className="mr-auto flex items-center gap-1.5 text-xs text-muted">
-                <ScribbleIcon className="h-3.5 w-3.5" />
-                说出来也行，识别的字会出现在框里，可以再改
+                {scriptcheck ? (
+                  <>
+                    <span aria-hidden>🧐</span>
+                    先免费找疑点，勾选后才开始查证
+                  </>
+                ) : (
+                  <>
+                    <ScribbleIcon className="h-3.5 w-3.5" />
+                    说出来也行，识别的字会出现在框里，可以再改
+                  </>
+                )}
               </p>
             )
           ) : null}
@@ -467,14 +573,20 @@ export function HomeInputCard() {
             </p>
           ) : null}
 
+          {formError ? (
+            <p role="alert" className="w-full text-right text-xs font-black text-coral">
+              ⚠️ {formError}
+            </p>
+          ) : null}
+
           <button
             type="button"
             disabled={!canSubmit || submitting}
             onClick={handleSubmit}
             className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand px-6 py-2.5 text-base font-black text-white shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:border-gray disabled:bg-gray-soft disabled:text-gray disabled:shadow-none"
           >
-            <span aria-hidden>{submitting ? '⏳' : '🕵️'}</span>
-            {submitting ? '正在整理截图…' : '立案调查'}
+            <span aria-hidden>{submitting ? '⏳' : scriptcheck ? '🔍' : '🕵️'}</span>
+            {submitting ? '正在整理截图…' : scriptcheck ? '免费找疑点' : '立案调查'}
           </button>
         </div>
       </div>
