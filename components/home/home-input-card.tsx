@@ -1,15 +1,7 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ComponentType,
-  type SVGProps,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentType, type SVGProps } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { SpeechBubble } from '@/components/ui/speech-bubble';
 import {
   CameraIcon,
@@ -217,7 +209,11 @@ export function HomeInputCard() {
     <section className="relative mx-auto mt-20 w-full max-w-[860px] px-4 sm:mt-16">
       <div className="relative rounded-[26px] border-[3px] border-ink bg-card p-4 shadow-ink-lg sm:p-5">
         <div className="pointer-events-none absolute -top-[58px] -left-1 z-20 flex items-end sm:-top-[66px] sm:-left-4">
-          <DetectiveMascot className="w-[56px] -rotate-3 sm:w-[68px]" />
+          <img
+            src="/images/detective-logo.png"
+            alt="侦探社吉祥物"
+            className="h-[64px] w-auto -rotate-3 sm:h-[78px]"
+          />
           <SpeechBubble
             tail="bottom"
             className="mb-3 -rotate-2 px-3 py-1.5 text-xs whitespace-nowrap sm:text-sm"

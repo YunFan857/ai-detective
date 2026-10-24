@@ -37,7 +37,7 @@ const DEMO_CASES: DemoCase[] = [
 
 export function HistoryCases() {
   return (
-    <section className="mx-auto mt-7 w-full max-w-[860px] px-4">
+    <section id="history-cases" className="mx-auto mt-7 w-full max-w-[860px] scroll-mt-6 px-4">
       <h2 className="flex items-center gap-2 text-sm font-black">
         <FolderIcon className="h-4 w-4 text-tangerine" />
         历史卷宗

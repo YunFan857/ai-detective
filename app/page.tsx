@@ -3,6 +3,7 @@ import { HomeBackground } from '@/components/home/home-background';
 import { HomeHero } from '@/components/home/home-hero';
 import { HomeInputCard } from '@/components/home/home-input-card';
 import { HistoryCases } from '@/components/home/history-cases';
+import { AccountDock } from '@/components/home/account-dock';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 
 export default function HomePage() {
@@ -24,6 +25,9 @@ export default function HomePage() {
           <HistoryCases />
         </ErrorBoundary>
       </div>
+      <ErrorBoundary label="演示账号">
+        <AccountDock />
+      </ErrorBoundary>
     </main>
   );
 }
