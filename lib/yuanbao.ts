@@ -115,7 +115,7 @@ async function readCache(file: string): Promise<SearchResult[] | null> {
     if (!Array.isArray(data.results) || !data.results.every(isSearchResult)) {
       return null;
     }
-    return data.results;
+    return data.results.map(normalizeResult);
   } catch {
     return null;
   }
@@ -154,6 +154,31 @@ function toIsoString(value: unknown): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+/** 折叠连续空白并去掉首尾空白，避免接口返回的换行撑破卡片布局。 */
+function normalizeText(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+/** 站点名缺失时用域名兜底，去掉 www. 前缀。 */
+function siteFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '');
+  } catch {
+    return '';
+  }
+}
+
+/** 统一来源字段：站点兜底、文本归一化；缓存与实时结果都走这里。 */
+function normalizeResult(result: SearchResult): SearchResult {
+  return {
+    url: result.url,
+    site: normalizeText(result.site) || siteFromUrl(result.url),
+    title: normalizeText(result.title),
+    snippet: normalizeText(result.snippet),
+    ...(result.publishedAt ? { publishedAt: result.publishedAt } : {}),
+  };
+}
+
 function parsePage(raw: unknown): SearchResult | null {
   let page: unknown = raw;
   if (typeof raw === 'string') {
@@ -172,7 +197,7 @@ function parsePage(raw: unknown): SearchResult | null {
     return null;
   }
 
-  return {
+  return normalizeResult({
     url: item.url,
     site: typeof item.site === 'string' ? item.site : '',
     title: typeof item.title === 'string' ? item.title : '',
@@ -183,7 +208,7 @@ function parsePage(raw: unknown): SearchResult | null {
           ? item.content
           : '',
     publishedAt: toIsoString(item.date),
-  };
+  });
 }
 
 type RawSearchResponse = {

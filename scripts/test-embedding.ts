@@ -12,7 +12,8 @@ dotenv.config();
 const model = process.env.EMBEDDING_MODEL?.trim() ?? '';
 const embeddingBase = process.env.EMBEDDING_BASE_URL?.trim() ?? '';
 const baseURL = embeddingBase || process.env.LLM_BASE_URL?.trim() || '';
-const apiKey = process.env.LLM_API_KEY?.trim() ?? '';
+const apiKey =
+  process.env.EMBEDDING_API_KEY?.trim() || process.env.LLM_API_KEY?.trim() || '';
 
 /** 只保留协议与域名，避免把路径或密钥打进日志。 */
 function maskBase(url: string): string {

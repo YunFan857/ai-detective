@@ -2,7 +2,8 @@
  * 流水线第四步：同源合并。
  * 按疑点分别聚类：先算文本相似度（向量余弦优先，失败降级为中文 3-gram Jaccard），
  * 再用并查集合并疑似同源的来源，最后让大模型复核每个多人组。
- * 每条来源都会落到一个组里（无关来源单独成组），保证 groupId 完整。
+ * 只有真正合并了至少两条来源的才输出同源组；无关来源与独立信源不建组，
+ * 但仍会回写 groupId / isOrigin 到来源对象，保证卷宗与事件一致。
  */
 import pLimit from 'p-limit';
 import { z } from 'zod';
@@ -32,8 +33,6 @@ const TIER_RANK: Record<Tier, number> = {
 };
 
 const SAME_SOURCE_FALLBACK_REASON = '标题与摘要高度相似，疑似转载或洗稿，未能通过模型复核。';
-const SINGLETON_REASON = '未发现同源转载，视为独立信源。';
-const IRRELEVANT_REASON = '立场与疑点无关，单独成组。';
 
 /** 外部依赖，测试可注入桩函数以保证结果可重复。 */
 export type ClusterDeps = {
@@ -289,11 +288,10 @@ function clusterClaim(list: Source[], vectors: number[][] | null): GroupDraft[] 
 
   const drafts: GroupDraft[] = [];
   for (const members of buckets.values()) {
+    // 单成员没有同源关系，不建组；只有多人桶才需要复核。
     if (members.length < MIN_REVIEW_SIZE) {
-      drafts.push({ members, reason: SINGLETON_REASON });
       continue;
     }
-
     drafts.push({ members, reason: SAME_SOURCE_FALLBACK_REASON });
   }
 
@@ -369,65 +367,32 @@ export async function clusterSources(
   // 各疑点并行聚类与复核；最终仍按 claimOrder 顺序拼接，保证 groupId 稳定。
   const perClaim = await Promise.all(
     claimOrder.map(async (claimId) => {
-      const list = byClaim.get(claimId) ?? [];
       const relevant = relevantByClaim.get(claimId) ?? [];
-      const groups: PendingGroup[] = list
-        .filter((source) => source.stance === 'irrelevant')
-        .map((source) => ({
-          claimId,
-          sources: [source],
-          originSourceId: source.id,
-          reason: IRRELEVANT_REASON,
-        }));
+      const groups: PendingGroup[] = [];
 
       const drafts = clusterClaim(relevant, vectorsByClaim.get(claimId) ?? null);
       const reviewed = await Promise.all(
         drafts.map(async (draft) => {
-          if (draft.members.length < MIN_REVIEW_SIZE) {
-            return { draft, kept: draft.members, reason: SINGLETON_REASON };
-          }
           // 软超时后不再发起新的复核，保留相似度初筛结果。
           if (deadlineReached()) {
-            return { draft, kept: draft.members, reason: SAME_SOURCE_FALLBACK_REASON };
+            return { kept: draft.members, reason: SAME_SOURCE_FALLBACK_REASON };
           }
-          const result = await reviewLimit(() =>
-            reviewGroup(draft.members, emit, deps.review, options.signal),
-          );
-          return { draft, ...result };
+          return reviewLimit(() => reviewGroup(draft.members, emit, deps.review, options.signal));
         }),
       );
 
-      for (const { draft, kept, reason } of reviewed) {
+      for (const { kept, reason } of reviewed) {
+        // 复核后不足两条说明并不存在同源关系：不建组，成员各自独立。
         if (kept.length < MIN_REVIEW_SIZE) {
-          // 单成员或复核后不足两条：全部拆成独立组
-          for (const source of draft.members) {
-            groups.push({
-              claimId,
-              sources: [source],
-              originSourceId: source.id,
-              reason: SINGLETON_REASON,
-            });
-          }
           continue;
         }
 
-        const keptIds = new Set(kept.map((source) => source.id));
         groups.push({
           claimId,
           sources: kept,
           originSourceId: pickOrigin(kept).id,
           reason,
         });
-        for (const source of draft.members) {
-          if (!keptIds.has(source.id)) {
-            groups.push({
-              claimId,
-              sources: [source],
-              originSourceId: source.id,
-              reason: SINGLETON_REASON,
-            });
-          }
-        }
       }
 
       return groups;
@@ -443,6 +408,22 @@ export async function clusterSources(
     reason: item.reason,
   }));
 
+  // 回写来源对象：卷宗里的 sources 与事件流里的 patch 必须一致。
+  // 先清空旧分组，保证同一批来源重复聚类时结果不残留。
+  for (const source of sources) {
+    delete source.groupId;
+    delete source.isOrigin;
+  }
+  const byId = new Map(sources.map((source) => [source.id, source]));
+  for (const group of groups) {
+    for (const id of group.memberIds) {
+      const source = byId.get(id);
+      if (!source) continue;
+      source.groupId = group.id;
+      source.isOrigin = id === group.originSourceId;
+    }
+  }
+
   for (const group of groups) {
     for (const id of group.memberIds) {
       emit({
@@ -457,17 +438,19 @@ export async function clusterSources(
   return groups;
 }
 
-/** 独立信源数：排除成员全部为 irrelevant 的组。 */
+/**
+ * 独立信源数 = 相关来源数 − 被折叠进同源组的转载数。
+ * 无关来源不参与核查；组内除首发源外的成员视为同一信源。
+ */
 export function countIndependent(groups: SourceGroup[], sources: Source[] = []): number {
   if (sources.length === 0) {
-    return groups.filter((group) => group.memberIds.length > 0).length;
+    return groups.length;
   }
 
-  const byId = new Map(sources.map((source) => [source.id, source]));
-  return groups.filter((group) => {
-    if (group.memberIds.length === 0) {
-      return false;
-    }
-    return !group.memberIds.every((id) => byId.get(id)?.stance === 'irrelevant');
-  }).length;
+  const relevant = sources.filter((source) => source.stance !== 'irrelevant').length;
+  const folded = groups.reduce(
+    (sum, group) => sum + Math.max(0, group.memberIds.length - 1),
+    0,
+  );
+  return Math.max(0, relevant - folded);
 }

@@ -35,7 +35,7 @@ const EXPECT_SPLIT: { label: string; left: string; right: string }[] = [
   { label: 'c1(10/11)', left: 'src_wash_10', right: 'src_wash_11' },
 ];
 
-/** 必须独立成组 */
+/** 不能被并入任何同源组 */
 const EXPECT_SOLO = { label: 'c2(07)', id: 'src_wash_07' };
 
 type ReviewCapture = {
@@ -213,6 +213,9 @@ function signature(groups: SourceGroup[]): string {
 }
 
 function describeGroup(groupId: string, groups: SourceGroup[]): string {
+  if (groupId === 'missing') {
+    return '未合组';
+  }
   const group = groups.find((item) => item.id === groupId);
   return group ? `${group.id}(${group.memberIds.join(',')})` : `${groupId}(missing)`;
 }
@@ -234,14 +237,25 @@ function evaluate(sources: Source[], result: RunResult): Attempt {
     failed.push(`组内 claimId 不一致：${claimDrift.map((group) => group.id).join(', ')}`);
   }
 
-  const missingGroup = sources.filter((source) => !updates.get(source.id)?.groupId);
-  const duplicated = sources.filter(
-    (source) => groups.filter((group) => group.memberIds.includes(source.id)).length !== 1,
-  );
-  if (missingGroup.length > 0 || duplicated.length > 0) {
+  const memberIds = groups.flatMap((group) => group.memberIds);
+  const memberSet = new Set(memberIds);
+  const grouped = sources.filter((source) => memberSet.has(source.id));
+  const ungrouped = sources.filter((source) => !memberSet.has(source.id));
+
+  const singletonGroups = groups.filter((group) => group.memberIds.length < 2);
+  const missingGroup = grouped.filter((source) => !updates.get(source.id)?.groupId);
+  const leakedGroup = ungrouped.filter((source) => updates.get(source.id)?.groupId);
+  if (
+    singletonGroups.length > 0 ||
+    memberIds.length !== memberSet.size ||
+    missingGroup.length > 0 ||
+    leakedGroup.length > 0
+  ) {
     failed.push(
-      `groupId 覆盖异常：缺 ${missingGroup.map((s) => s.id).join(',') || '无'}；重复 ${
-        duplicated.map((s) => s.id).join(',') || '无'
+      `groupId 覆盖异常：单人组 ${singletonGroups.map((g) => g.id).join(',') || '无'}；重复成员 ${
+        memberIds.length - memberSet.size
+      } 条；成员缺 groupId ${missingGroup.map((s) => s.id).join(',') || '无'}；非成员带 groupId ${
+        leakedGroup.map((s) => s.id).join(',') || '无'
       }`,
     );
   }
@@ -263,16 +277,21 @@ function evaluate(sources: Source[], result: RunResult): Attempt {
   }
 
   for (const item of EXPECT_SPLIT) {
-    if (groupIdOf(item.left) === groupIdOf(item.right) || groupIdOf(item.left) === 'missing') {
-      failed.push(`${item.label} 未分开：${groupIdOf(item.left)} / ${groupIdOf(item.right)}`);
+    const left = groupIdOf(item.left);
+    const right = groupIdOf(item.right);
+    // 两条都未合组，说明确实不同源，符合预期。
+    if (left === 'missing' && right === 'missing') {
+      continue;
+    }
+    if (left === right) {
+      failed.push(`${item.label} 未分开：${left} / ${right}`);
     }
   }
 
   const soloGroup = groups.find((group) => group.memberIds.includes(EXPECT_SOLO.id));
-  const mergedGroupIds = new Set(EXPECT_MERGED.flatMap((item) => item.ids.map(groupIdOf)));
-  if (!soloGroup || soloGroup.memberIds.length !== 1 || mergedGroupIds.has(soloGroup.id)) {
+  if (soloGroup || updates.get(EXPECT_SOLO.id)?.groupId) {
     failed.push(
-      `${EXPECT_SOLO.label} 未独立：${soloGroup ? `${soloGroup.id}(${soloGroup.memberIds.join(',')})` : 'missing'}`,
+      `${EXPECT_SOLO.label} 不应合组：${soloGroup ? `${soloGroup.id}(${soloGroup.memberIds.join(',')})` : updates.get(EXPECT_SOLO.id)?.groupId}`,
     );
   }
 
@@ -305,21 +324,20 @@ function printRunDetail(
   for (const item of EXPECT_SPLIT) {
     const left = groupIdOf(item.left);
     const right = groupIdOf(item.right);
-    const split = left !== right;
+    const split = left !== right || (left === 'missing' && right === 'missing');
     console.log(
       `${split ? '✓' : '✗'} ${item.label} ${split ? '分开' : '未分开'}：${describeGroup(left, groups)} / ${describeGroup(right, groups)}`,
     );
   }
 
   const solo = groupIdOf(EXPECT_SOLO.id);
-  const soloGroup = groups.find((group) => group.id === solo);
-  const soloOk = soloGroup?.memberIds.length === 1;
+  const soloOk = solo === 'missing';
   console.log(
-    `${soloOk ? '✓' : '✗'} ${EXPECT_SOLO.label} ${soloOk ? '独立' : '未独立'}：${describeGroup(solo, groups)}`,
+    `${soloOk ? '✓' : '✗'} ${EXPECT_SOLO.label} ${soloOk ? '独立（未合组）' : '误合组'}：${describeGroup(solo, groups)}`,
   );
 
   if (attempt.failed.length === 0) {
-    console.log('✓ 结构断言：claimId 隔离 / groupId 覆盖 / 每组唯一 isOrigin');
+    console.log('✓ 结构断言：只建多人组 / claimId 隔离 / groupId 覆盖 / 每组唯一 isOrigin');
     return;
   }
 
@@ -345,7 +363,7 @@ function printRunDetail(
       console.log(`    keep: ${item.keep.join(', ') || '(空)'}`);
       console.log(`    exclusionReason: ${item.reason ?? '(空)'}`);
       console.log(
-        `    被排除：${excluded.length > 0 ? excluded.join(', ') : '无'}（该成员因此单独成组）`,
+        `    被排除：${excluded.length > 0 ? excluded.join(', ') : '无'}（该成员不并入该组）`,
       );
     } else {
       console.log(
@@ -404,7 +422,7 @@ async function main(): Promise<void> {
     return;
   }
   console.log(
-    '5 次均满足：04/05/09 合组、06/08 合组、10/11 分开、07 独立、claimId 隔离、groupId 完整、每组唯一 isOrigin',
+    '5 次均满足：04/05/09 合组、06/08 合组、10/11 分开、07 未合组、只建多人组、claimId 隔离、groupId 完整、每组唯一 isOrigin',
   );
 }
 

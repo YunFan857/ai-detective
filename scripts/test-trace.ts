@@ -38,8 +38,8 @@ function assertTimeline(
   events: CaseEvent[],
 ): void {
   const sourceById = new Map(sources.map((source) => [source.id, source]));
-  const originIds = new Set(
-    groups.filter((group) => group.claimId === claim.id).map((group) => group.originSourceId),
+  const groupById = new Map(
+    groups.filter((group) => group.claimId === claim.id).map((group) => [group.id, group]),
   );
 
   assert.ok(steps.length <= MAX_STEPS, `${claim.id} 步数超过 ${MAX_STEPS}：${steps.length}`);
@@ -51,7 +51,11 @@ function assertTimeline(
     const source = sourceById.get(step.sourceId);
     assert.ok(source, `${claim.id} 的节点 ${step.sourceId} 不在 sources 中`);
     assert.equal(source.claimId, claim.id, `${claim.id} 的节点 ${step.sourceId} 属于其他疑点`);
-    assert.ok(originIds.has(step.sourceId), `${claim.id} 的节点 ${step.sourceId} 不是同源组首发源`);
+    const group = source.groupId ? groupById.get(source.groupId) : undefined;
+    assert.ok(
+      !group || group.originSourceId === step.sourceId,
+      `${claim.id} 的节点 ${step.sourceId} 是组内转载，应只取首发源`,
+    );
 
     if (source.snippet.trim()) {
       assert.ok(

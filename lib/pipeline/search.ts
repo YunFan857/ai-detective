@@ -14,6 +14,8 @@ const RESULTS_PER_QUERY = 6;
 /** 元宝只接受 Cnt=10 等固定档位，取 10 条后本地截取 6 条 */
 const REQUEST_CNT = 10;
 const MAX_SOURCES_PER_CLAIM = 15;
+/** 来源摘要字数上限：接口 passage 可达 800 字，入库前统一截断。 */
+const MAX_SNIPPET_CHARS = 200;
 /** 修复请求里回传上一次输出的长度上限，避免提示词过长 */
 const REPAIR_OUTPUT_LIMIT = 1200;
 /** 元宝搜索连续失败超过 2 次即判定线索中断，停止继续检索。 */
@@ -338,6 +340,15 @@ function relevance(claimText: string, result: SearchResult): number {
   return hits / grams.length;
 }
 
+/** 摘要按字符截断，超过上限时补省略号。 */
+function clipSnippet(text: string): string {
+  const chars = [...text];
+  if (chars.length <= MAX_SNIPPET_CHARS) {
+    return text;
+  }
+  return `${chars.slice(0, MAX_SNIPPET_CHARS - 1).join('')}…`;
+}
+
 /** 正反并行搜证，逐条推送来源；单路失败降级为空结果。 */
 export async function gatherEvidence(
   claims: Claim[],
@@ -503,8 +514,9 @@ export async function gatherEvidence(
         url: result.url,
         site: result.site,
         title: result.title,
-        snippet: result.snippet,
+        snippet: clipSnippet(result.snippet),
         publishedAt: result.publishedAt,
+        publishedAtStatus: result.publishedAt ? 'known' : 'missing',
         direction: task.direction,
         query: task.query,
       });

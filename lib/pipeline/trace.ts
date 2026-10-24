@@ -252,8 +252,13 @@ export async function fillPublishedDates(
 
           // 原地补齐，供后续判决与卷宗直接复用
           source.publishedAt = publishedAt;
+          source.publishedAtStatus = 'known';
           filled.set(source.id, publishedAt);
-          emit({ type: 'source_update', id: source.id, patch: { publishedAt } });
+          emit({
+            type: 'source_update',
+            id: source.id,
+            patch: { publishedAt, publishedAtStatus: 'known' },
+          });
         }),
       );
     }
@@ -267,23 +272,20 @@ function parseTime(value: string | undefined): number {
   return value ? Date.parse(value) : NaN;
 }
 
-/** 每个同源组取首发源，按时间升序截断，并优先覆盖不同 tier。 */
+/** 每个同源组取首发源，独立来源各自成节点；按时间升序截断，并优先覆盖不同 tier。 */
 function selectTimelineNodes(claim: Claim, sources: Source[], groups: SourceGroup[]): Source[] {
-  const byId = new Map(sources.map((source) => [source.id, source]));
-  const seen = new Set<string>();
-  const candidates: Source[] = [];
+  const groupById = new Map(
+    groups.filter((group) => group.claimId === claim.id).map((group) => [group.id, group]),
+  );
 
-  for (const group of groups) {
-    if (group.claimId !== claim.id || seen.has(group.originSourceId)) continue;
-    seen.add(group.originSourceId);
-
-    const source = byId.get(group.originSourceId);
-    if (!source) continue;
-    if (source.stance !== 'support' && source.stance !== 'refute') continue;
-    if (!Number.isFinite(parseTime(source.publishedAt))) continue;
-
-    candidates.push(source);
-  }
+  const candidates = sources.filter((source) => {
+    if (source.claimId !== claim.id) return false;
+    if (source.stance !== 'support' && source.stance !== 'refute') return false;
+    if (!Number.isFinite(parseTime(source.publishedAt))) return false;
+    const group = source.groupId ? groupById.get(source.groupId) : undefined;
+    // 同源组只保留首发源；组内转载的时间变化由 mutation 描述，不单独占节点。
+    return group ? group.originSourceId === source.id : true;
+  });
 
   candidates.sort((a, b) => parseTime(a.publishedAt) - parseTime(b.publishedAt));
   if (candidates.length <= MAX_NODES) {
@@ -480,6 +482,11 @@ export async function traceTimeline(
   for (const { claimId, steps } of results) {
     timelines[claimId] = steps;
     emit({ type: 'timeline', claimId, steps });
+  }
+
+  // 落盘前统一时间状态：有日期即 known，仍未取到则标记 missing。
+  for (const source of sources) {
+    source.publishedAtStatus = source.publishedAt ? 'known' : 'missing';
   }
 
   return timelines;

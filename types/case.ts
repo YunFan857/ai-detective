@@ -106,6 +106,8 @@ export const SourceSchema = z.object({
   snippet: z.string(),
   /** ISO 8601 时间。 */
   publishedAt: z.iso.datetime().optional(),
+  /** 发布时间状态：known=已取得；missing=已尝试补抓但未取到。 */
+  publishedAtStatus: z.enum(['known', 'missing']).optional(),
   /** 该来源来自正方（pro）还是反方（con）检索。 */
   direction: z.enum(['pro', 'con']),
   query: z.string(),

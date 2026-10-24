@@ -38,7 +38,7 @@ const EXPECT_DIFFERENT: [string, string][] = [
   ['src_wash_07', 'src_wash_09'],
 ];
 
-/** 官方辟谣来源，必须保留为单成员组。 */
+/** 官方辟谣来源：不并入洗稿组，也不单独成组。 */
 const OFFICIAL_ONLY = 'src_official_13';
 
 const TIER_RANK: Record<Tier, number> = {
@@ -176,19 +176,37 @@ function printTable(
   rows.forEach((row) => console.log(line(row)));
 }
 
-/** 两组场景共用的结构断言：group 覆盖、claimId 隔离、isOrigin、emit 顺序。 */
+/**
+ * 结构断言：只建多人组、成员不重复、非成员无 groupId、isOrigin 与 emit 顺序。
+ */
 function checkIntegrity(label: string, sources: Source[], result: RunResult): void {
   const { groups, events, updates, updateCount } = result;
 
   const memberIds = groups.flatMap((group) => group.memberIds);
+  const memberSet = new Set(memberIds);
+  const singletonGroups = groups.filter((group) => group.memberIds.length < 2);
+  const grouped = sources.filter((source) => memberSet.has(source.id));
+  const ungrouped = sources.filter((source) => !memberSet.has(source.id));
+
   check(
-    `${label}每条来源恰好属于一个 group`,
-    groups.filter((group) => group.memberIds.length > 0).length === groups.length &&
-      memberIds.length === sources.length &&
-      new Set(memberIds).size === sources.length &&
-      sources.every(
+    `${label}同源组只保留至少两条成员`,
+    singletonGroups.length === 0,
+    singletonGroups.map((group) => group.id).join(', '),
+  );
+  check(
+    `${label}每条来源最多属于一个组，成员只出现一次`,
+    memberIds.length === memberSet.size &&
+      grouped.every(
         (source) => updateCount.get(source.id) === 1 && !!updates.get(source.id)?.groupId,
       ),
+    `组成员 ${grouped.length} 条 / 全部 ${sources.length} 条`,
+  );
+  check(
+    `${label}未合组来源不带 groupId`,
+    ungrouped.every(
+      (source) => updateCount.get(source.id) === undefined && !updates.get(source.id)?.groupId,
+    ),
+    ungrouped.map((source) => source.id).join(', '),
   );
 
   const claimDrift = groups.filter((group) => {
@@ -268,11 +286,17 @@ async function main(): Promise<void> {
     );
   }
 
-  const wrongSplit = EXPECT_DIFFERENT.filter(
-    ([left, right]) => groupIdOf(left) === groupIdOf(right),
-  );
+  const wrongSplit = EXPECT_DIFFERENT.filter(([left, right]) => {
+    const leftGroup = groupIdOf(left);
+    const rightGroup = groupIdOf(right);
+    // 两条都未合组，说明确实不同源，符合预期。
+    if (leftGroup === 'missing' && rightGroup === 'missing') {
+      return false;
+    }
+    return leftGroup === rightGroup;
+  });
   check(
-    '未达阈值的洗稿对保持独立组',
+    '未达阈值的洗稿对保持独立',
     wrongSplit.length === 0,
     wrongSplit.map(([left, right]) => `${left}=${right}`).join(', '),
   );
@@ -284,24 +308,18 @@ async function main(): Promise<void> {
 
   const officialGroup = groups.find((group) => group.memberIds.includes(OFFICIAL_ONLY));
   check(
-    'c2 的官方辟谣来源保留为单成员组',
-    officialGroup?.memberIds.length === 1 && officialGroup.originSourceId === OFFICIAL_ONLY,
-    officialGroup ? officialGroup.id : 'missing',
+    'c2 的官方辟谣来源不并入洗稿组，也不单独成组',
+    officialGroup === undefined && !updates.get(OFFICIAL_ONLY)?.groupId,
+    officialGroup ? officialGroup.id : '未建组',
   );
-
-  const washGroupId = groupIdOf('src_marketing_04');
-  check('官方辟谣未并入营销洗稿组', washGroupId !== 'missing' && washGroupId !== officialGroup?.id);
 
   const independent = countIndependent(groups, sources);
-  const irrelevantOnly = groups.filter((group) =>
-    group.memberIds.every(
-      (id) => sources.find((source) => source.id === id)?.stance === 'irrelevant',
-    ),
-  );
+  const relevantCount = sources.filter((source) => source.stance !== 'irrelevant').length;
+  const foldedCount = groups.reduce((sum, group) => sum + (group.memberIds.length - 1), 0);
   check(
-    'countIndependent 排除全为 irrelevant 的组',
-    independent === groups.length - irrelevantOnly.length,
-    `${independent} 个独立信源 / ${groups.length} 组`,
+    'countIndependent = 相关来源数 − 被折叠的转载数',
+    independent === relevantCount - foldedCount,
+    `${independent} = ${relevantCount} − ${foldedCount}`,
   );
 
   // 降级场景：向量接口抛错，应回退 3-gram Jaccard，且结构断言仍成立
@@ -323,7 +341,11 @@ async function main(): Promise<void> {
     warnings.some((line) => line.includes('降级为 3-gram Jaccard')),
     `${warnings.length} 条日志`,
   );
-  check('向量失败时不中断，仍产出分组', fallback.groups.length > 0, `${fallback.groups.length} 组`);
+  check(
+    '向量失败时不中断，照常返回分组结果（Jaccard 未命中时可为 0 组）',
+    fallback.events.some((event) => event.type === 'groups'),
+    `${fallback.groups.length} 组`,
+  );
   checkIntegrity('[降级] ', sources, fallback);
   console.log(
     `[降级] 分组结果：${fallback.groups.map((group) => group.memberIds.join('+')).join(' | ')}`,

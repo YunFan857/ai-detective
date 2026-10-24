@@ -388,7 +388,9 @@ export async function runInvestigation(
         ]);
         graded = gradedResult.map((source) => {
           const publishedAt = filled.get(source.id);
-          return publishedAt && !source.publishedAt ? { ...source, publishedAt } : source;
+          return publishedAt && !source.publishedAt
+            ? { ...source, publishedAt, publishedAtStatus: 'known' as const }
+            : source;
         });
       } catch (error) {
         if (signal?.aborted) throw error;
