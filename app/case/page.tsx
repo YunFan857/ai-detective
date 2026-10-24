@@ -4,6 +4,7 @@ import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from
 import { CaseHeader } from '@/components/case/case-header';
 import { EvidenceGraph } from '@/components/case/evidence-graph';
 import { ProgressFeed } from '@/components/progress-feed';
+import { ShareCardDialog } from '@/components/share-card';
 import { StepButtons } from '@/components/step-buttons';
 import { VerdictPanel } from '@/components/verdict-panel';
 import type { StepId } from '@/lib/steps';
@@ -71,6 +72,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   const reveal = useStepReveal(state);
 
   const [verdictOpen, setVerdictOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [activeClaimId, setActiveClaimId] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<{
     sourceId: string;
@@ -109,8 +111,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   const input = state.input || text || '';
   const modeLabel = MODE_LABELS[mode ?? 'mock'] ?? '文字立案';
 
-  const claim =
-    state.claims.find((item) => item.id === activeClaimId) ?? state.claims[0] ?? null;
+  const claim = state.claims.find((item) => item.id === activeClaimId) ?? state.claims[0] ?? null;
   const claimSources = useMemo(() => {
     if (!claim) return [];
     return state.sourceOrder
@@ -151,6 +152,17 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   );
 
   const handleCloseVerdict = useCallback(() => setVerdictOpen(false), []);
+
+  /** 打开分享卡时先收起判决书，关闭后再回到判决书，避免两个弹层抢 Esc。 */
+  const handleOpenShareCard = useCallback(() => {
+    setVerdictOpen(false);
+    setShareOpen(true);
+  }, []);
+
+  const handleCloseShareCard = useCallback(() => {
+    setShareOpen(false);
+    setVerdictOpen(true);
+  }, []);
 
   return (
     <main className="flex h-dvh min-h-[720px] min-w-[1280px] flex-col overflow-hidden bg-paper text-ink">
@@ -196,6 +208,15 @@ function CaseContent({ searchParams }: CaseSearchParams) {
         timeline={verdictTimeline}
         onClose={handleCloseVerdict}
         onSelectSource={handleSelectSource}
+        onGenerateDebunkCard={handleOpenShareCard}
+      />
+
+      <ShareCardDialog
+        open={shareOpen}
+        verdict={state.verdict}
+        sourcesById={state.sourcesById}
+        sourceOrder={state.sourceOrder}
+        onClose={handleCloseShareCard}
       />
     </main>
   );
