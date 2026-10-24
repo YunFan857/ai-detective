@@ -1,4 +1,17 @@
-// TODO(PRD 步骤 1)：替换为首页占位，由 B 负责实现。
+import { HomeBackground } from '@/components/home/home-background';
+import { HomeHero } from '@/components/home/home-hero';
+import { HomeInputCard } from '@/components/home/home-input-card';
+import { HistoryCases } from '@/components/home/history-cases';
+
 export default function HomePage() {
-  return <main>AI 侦探社 · 结案卷宗（占位）</main>;
+  return (
+    <main className="relative min-h-dvh overflow-hidden bg-paper pb-14">
+      <HomeBackground />
+      <div className="relative">
+        <HomeHero />
+        <HomeInputCard />
+        <HistoryCases />
+      </div>
+    </main>
+  );
 }
