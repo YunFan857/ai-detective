@@ -16,6 +16,8 @@ const REQUEST_CNT = 10;
 const MAX_SOURCES_PER_CLAIM = 15;
 /** 修复请求里回传上一次输出的长度上限，避免提示词过长 */
 const REPAIR_OUTPUT_LIMIT = 1200;
+/** 元宝搜索连续失败超过 2 次即判定线索中断，停止继续检索。 */
+const MAX_SEARCH_ERRORS = 2;
 
 /** 搜索词唯一标准结构：pro / con 两个数组，每个元素都是非空字符串。 */
 const QueryPlanSchema = z.strictObject({
@@ -80,8 +82,10 @@ export type GatherEvidenceOptions = {
   preplanned?: ReadonlyMap<string, { pro: string[]; con: string[] }>;
   /** 软截止时间（epoch ms）；到点后尚未开始的疑点不再搜证。 */
   deadline?: number;
-  /** 因软截止时间未开始搜证的疑点。 */
-  onClaimSkipped?: (claimId: string) => void;
+  /** 因软截止时间或线索中断未开始搜证的疑点。 */
+  onClaimSkipped?: (claimId: string, reason: 'deadline' | 'line_broken') => void;
+  /** 元宝搜索连续失败超过阈值时通知调用方：线索中断。 */
+  onLineBroken?: () => void;
   /** 软超时取消信号，用于中止在途搜索与检索词生成。 */
   signal?: AbortSignal;
   onPlan?: (plan: ClaimQueryPlan) => void;
@@ -350,6 +354,31 @@ export async function gatherEvidence(
   const perClaimLimit = options.perClaimLimit ?? counts.pro + counts.con;
   const tasks: QueryTask[] = [];
 
+  // 元宝接口连续失败超过阈值时停止继续检索，改为用已有证据结案。
+  let searchErrors = 0;
+  let lineBroken = false;
+  const noteSearchError = (query: string, error: unknown): void => {
+    if (lineBroken || options.signal?.aborted) {
+      return;
+    }
+    searchErrors += 1;
+    emit({
+      type: 'error',
+      message: `搜索「${query}」失败：${(error as Error).message}`,
+      recoverable: true,
+    });
+    if (searchErrors <= MAX_SEARCH_ERRORS) {
+      return;
+    }
+    lineBroken = true;
+    emit({
+      type: 'error',
+      message: '线索中断：元宝搜索连续失败超过 2 次，已停止继续检索；将基于已有证据按「无法证实」结案。',
+      recoverable: true,
+    });
+    options.onLineBroken?.();
+  };
+
   // 拆疑点阶段已生成检索词的疑点不再单独调用模型；其余并行补生成。
   const plans = await Promise.all(
     claims.map((claim): Promise<ClaimQueryPlan> | ClaimQueryPlan => {
@@ -376,12 +405,17 @@ export async function gatherEvidence(
         const claim = claims[index];
 
         if (options.deadline !== undefined && Date.now() >= options.deadline) {
-          options.onClaimSkipped?.(claim.id);
+          options.onClaimSkipped?.(claim.id, 'deadline');
           emit({
             type: 'error',
             message: `疑点 ${claim.id} 因时间不足未开始搜证，按「我不知道」处理`,
             recoverable: true,
           });
+          return;
+        }
+
+        if (lineBroken) {
+          options.onClaimSkipped?.(claim.id, 'line_broken');
           return;
         }
 
@@ -406,11 +440,7 @@ export async function gatherEvidence(
               })
               .then((results) => results.slice(0, RESULTS_PER_QUERY))
               .catch((error: unknown) => {
-                emit({
-                  type: 'error',
-                  message: `搜索「${item.query}」失败：${(error as Error).message}`,
-                  recoverable: true,
-                });
+                noteSearchError(item.query, error);
                 return [];
               }),
           };

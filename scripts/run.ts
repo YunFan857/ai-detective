@@ -1,10 +1,10 @@
 import dotenv from 'dotenv';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { loadPreview } from '../lib/case-store';
 import { runInvestigation } from '../lib/pipeline';
 import { getExecutedSearchPlan } from '../lib/pipeline/search';
 import {
-  ClaimsPreviewSchema,
   type CaseEvent,
   type Claim,
   type ClaimsPreview,
@@ -22,7 +22,7 @@ type ParsedArgs = {
 };
 
 const USAGE =
-  '用法: pnpm run:case "要核查的消息" [--mode script] [--preview <previewId>] [--select c1,c3] [--save-as name]';
+  '用法: pnpm run:case ("要核查的消息" | --file <路径>) [--mode script] [--preview <previewId>] [--select c1,c3] [--save-as name]';
 
 function parseArgs(argv: string[]): ParsedArgs {
   const words: string[] = [];
@@ -64,20 +64,13 @@ function resolveMode(value: string | undefined): Mode {
   throw new Error(`未知模式：${value}（可选 factcheck / scriptcheck，简写 script）`);
 }
 
-/** 从 .cache/previews 读回预览；只接受安全文件名。 */
-async function loadPreview(previewId: string): Promise<ClaimsPreview> {
-  if (!/^[A-Za-z0-9_-]+$/.test(previewId)) {
-    throw new Error(`previewId 非法：${previewId}`);
-  }
-  const file = path.join(process.cwd(), '.cache', 'previews', `${previewId}.json`);
-  let raw: string;
-  try {
-    raw = await readFile(file, 'utf8');
-  } catch {
+/** 从 .cache/previews 或 cache/preview-*.json 读回预览；只接受安全文件名。 */
+async function loadPreviewOrThrow(previewId: string): Promise<ClaimsPreview> {
+  const preview = await loadPreview(previewId);
+  if (!preview) {
     throw new Error(`找不到预览 ${previewId}，请先运行 pnpm run:claims 生成`);
   }
-  const parsed: unknown = JSON.parse(raw);
-  return ClaimsPreviewSchema.parse(parsed);
+  return preview;
 }
 
 function printEvent(event: CaseEvent): void {
@@ -157,15 +150,21 @@ async function main(): Promise<void> {
   const previewId = flags.get('preview');
   const selectFlag = flags.get('select');
   const saveAs = flags.get('save-as');
+  const fileFlag = flags.get('file');
+
+  if (fileFlag && rawText) {
+    throw new Error('命令行消息与 --file 只能二选一');
+  }
 
   let preview: ClaimsPreview | undefined;
   if (previewId) {
-    preview = await loadPreview(previewId);
+    preview = await loadPreviewOrThrow(previewId);
   } else if (selectFlag) {
     throw new Error('--select 需要配合 --preview 使用');
   }
 
-  const input = rawText || preview?.input || '';
+  const fileText = fileFlag ? (await readFile(fileFlag, 'utf8')).trim() : '';
+  const input = preview?.input || rawText || fileText;
   if (!input.trim()) {
     console.error(USAGE);
     process.exitCode = 1;

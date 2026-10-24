@@ -14,6 +14,9 @@ const DEFAULT_TEMPERATURE = 0.2;
 /** 默认输出上限；各阶段可按需要覆盖。 */
 const DEFAULT_MAX_TOKENS = 4_000;
 const MAX_VALIDATION_RETRIES = 2;
+/** 空正文重试时的输出预算上限。 */
+const MAX_OUTPUT_BUDGET = 8_000;
+const EMPTY_CONTENT = '模型返回内容为空';
 const DEFAULT_EMBEDDING_BATCH_SIZE = 64;
 const JSON_ONLY_INSTRUCTION =
   '你必须只输出一个合法的 JSON 对象，不要输出 Markdown 代码块、注释或任何解释性文字。';
@@ -179,7 +182,7 @@ async function requestCompletion(
 
   const content = response.choices[0]?.message?.content?.trim();
   if (!content) {
-    throw new LlmError('模型返回内容为空');
+    throw new LlmError(EMPTY_CONTENT);
   }
   return content;
 }
@@ -199,6 +202,7 @@ export async function chatJSON<T>(options: ChatJsonOptions<T>): Promise<T> {
     signal,
   } = options;
 
+  let budget = maxTokens;
   const messages: ChatMessage[] = [
     { role: 'system', content: `${system}\n\n${JSON_ONLY_INSTRUCTION}` },
     { role: 'user', content: user },
@@ -213,7 +217,7 @@ export async function chatJSON<T>(options: ChatJsonOptions<T>): Promise<T> {
     try {
       raw = await requestCompletion(messages, {
         temperature,
-        maxTokens,
+        maxTokens: budget,
         timeoutMs,
         jsonMode,
         ...(signal ? { signal } : {}),
@@ -225,6 +229,15 @@ export async function chatJSON<T>(options: ChatJsonOptions<T>): Promise<T> {
       }
       if (!timeoutRetried && isTimeoutError(error)) {
         timeoutRetried = true;
+        continue;
+      }
+      // 推理型模型的思维链会占用输出预算，预算打满时正文可能为空；放大预算重试一次。
+      if (
+        error instanceof LlmError &&
+        error.message === EMPTY_CONTENT &&
+        budget < MAX_OUTPUT_BUDGET
+      ) {
+        budget = Math.min(budget * 2, MAX_OUTPUT_BUDGET);
         continue;
       }
       throw error instanceof LlmError ? error : new LlmError('大模型调用失败', error);

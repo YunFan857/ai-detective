@@ -96,6 +96,7 @@ function buildPrompt(batch: Batch, mode: Mode = 'factcheck'): string {
 - stance：
   - support：标题或摘要明确支持疑点；
   - refute：标题或摘要明确否定疑点，包括辟谣、纠错、澄清；辟谣文章即使引述谣言原文，也算 refute；
+  - 若文章讨论的是另一件事、另一段历史、另一个统计口径（例如疑点是湘江战役减员，文章在谈长征别的阶段），即使出现相反数字也判 irrelevant；只有针对该疑点本身的否定才算 refute；
   - irrelevant：只是相关、可能有关、背景介绍、答非所问，或信息不足以判断。
 - 只依据 title 和 snippet 判断，不要脑补正文；“可能有关”不等于“证实”。
 - tier：trustedTier 不为 null 时原样返回该值；为 null 时才由你从 official / media / self / marketing / unknown 中判断。

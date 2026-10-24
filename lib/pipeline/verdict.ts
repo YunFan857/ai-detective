@@ -63,6 +63,13 @@ const MUTATION_RE =
 
 const CITATION_RE = /\[([^[\]]{1,80})\]/g;
 
+/** 反驳方指出「原说法确有出处，只是被改写或旧结论已被推翻」的表述。 */
+const DISTORTION_EVIDENCE_RE =
+  /曲解|断章|误读|改写|以偏概全|不再(把|将|列为)|推翻|旧研究|此前研究|原意|旧分类|误传/;
+
+/** 同等级冲突时，独立证人数差达到该值即按人数优势采信，不再看发布时间。 */
+const MAJORITY_GAP = 2;
+
 const TIER_NAMES: Record<Tier, string> = {
   official: '官方',
   media: '权威媒体',
@@ -457,14 +464,20 @@ function buildConflict(
       TIER_RANK[supportTier] > TIER_RANK[refuteTier]
         ? `采信支持方：${describeSide(supporters, supportTier)}等级高于反驳方的${TIER_NAMES[refuteTier]}`
         : `采信反驳方：${describeSide(refuters, refuteTier)}等级高于支持方的${TIER_NAMES[supportTier]}`;
+  } else if (Math.abs(supporters.length - refuters.length) >= MAJORITY_GAP) {
+    // 同等级时独立证人数差两个以上，人数优势比发布时间更能反映证据强度。
+    resolution =
+      supporters.length > refuters.length
+        ? `双方同属${TIER_NAMES[supportTier]}，支持方独立证人 ${supporters.length} 条多于反驳方 ${refuters.length} 条，采信支持方`
+        : `双方同属${TIER_NAMES[refuteTier]}，反驳方独立证人 ${refuters.length} 条多于支持方 ${supporters.length} 条，采信反驳方`;
   } else if (supportTime !== null && refuteTime !== null && supportTime !== refuteTime) {
     resolution =
       refuteTime > supportTime
-        ? `双方同属${TIER_NAMES[refuteTier]}，反驳方发布时间更晚，按后续更正采信反驳方`
-        : `双方同属${TIER_NAMES[supportTier]}，支持方发布时间更晚，按后续确认采信支持方`;
+        ? `双方同属${TIER_NAMES[refuteTier]}且证人数接近，反驳方发布时间更晚，按后续更正采信反驳方`
+        : `双方同属${TIER_NAMES[supportTier]}且证人数接近，支持方发布时间更晚，按后续确认采信支持方`;
   } else {
     undecided = true;
-    resolution = `双方同属${TIER_NAMES[refuteTier]}且发布时间没有明确先后，无法判断，按无法证实处理`;
+    resolution = `双方同属${TIER_NAMES[refuteTier]}、证人数接近且发布时间没有明确先后，无法判断，按无法证实处理`;
   }
 
   return {
@@ -488,6 +501,19 @@ function judgeByRules(witnesses: Witness[], distortion: Distortion): RuleVerdict
   const refuters = active.filter((witness) => witness.stance === 'refute');
   const authSupporters = supporters.filter((witness) => isAuthoritative(witness.tier)).length;
   const authRefuters = refuters.filter((witness) => isAuthoritative(witness.tier)).length;
+
+  // 一边全为反驳，但反驳方指出「原说法确有出处、只是被改写或旧结论已推翻」→ 断章取义
+  if (authRefuters > 0 && authSupporters === 0 && supporters.length === 0) {
+    const distortionRefuters = refuters.filter((witness) =>
+      DISTORTION_EVIDENCE_RE.test(`${witness.source.title} ${witness.source.snippet ?? ''}`),
+    );
+    if (distortionRefuters.length > 0) {
+      return {
+        level: 'out_of_context',
+        confidence: round2(Math.min(0.9, 0.78 + 0.02 * distortionRefuters.length)),
+      };
+    }
+  }
 
   // 权威来源明确反驳，且没有权威来源支持 → 谣言
   if (authRefuters > 0 && authSupporters === 0) {
@@ -1243,6 +1269,8 @@ export async function makeVerdict(
     deadline?: number;
     /** 是否已因软超时提前进入判决。 */
     timedOut?: boolean;
+    /** 元宝搜索连续失败，线索中断，改用已有证据结案。 */
+    lineBroken?: boolean;
     /** 超时未完成核查、必须按「我不知道」处理的疑点。 */
     forceUnverifiedClaimIds?: ReadonlySet<string>;
     /** 软超时取消信号，用于中止在途判决请求。 */
@@ -1313,7 +1341,7 @@ export async function makeVerdict(
   }
 
   const remainingMs = opts?.deadline !== undefined ? opts.deadline - Date.now() : TIMEOUT_MS;
-  const skipModel = opts?.timedOut === true || remainingMs <= 0;
+  const skipModel = opts?.timedOut === true || opts?.lineBroken === true || remainingMs <= 0;
   const llmTimeoutMs = Math.max(
     MIN_VERDICT_TIMEOUT_MS,
     Math.min(TIMEOUT_MS, remainingMs),
@@ -1348,7 +1376,9 @@ export async function makeVerdict(
             ...item,
             level: 'unverified' as const,
             confidence: 0.2,
-            summary: '我不知道。时间有限，未完成该疑点的证据核查。',
+            summary: opts?.lineBroken
+              ? '我不知道。线索中断，未完成该疑点的证据核查。'
+              : '我不知道。时间有限，未完成该疑点的证据核查。',
             citationIds: [],
           }
         : item,
@@ -1409,6 +1439,9 @@ export async function makeVerdict(
     !summary.includes('时间有限，基于已获取证据结案')
   ) {
     summary = `${summary}${summary ? ' ' : ''}时间有限，基于已获取证据结案。`;
+  }
+  if (opts?.lineBroken && !summary.includes('线索中断')) {
+    summary = `${summary}${summary ? ' ' : ''}线索中断，基于已有证据结案。`;
   }
 
   const cited = new Set<string>(summaryResult.used);

@@ -292,6 +292,7 @@ export async function runInvestigation(
     const deadline = startedAt + timeoutMs;
     const deadlineReached = (): boolean => Date.now() >= deadline;
     let timedOut = false;
+    let lineBroken = false;
     const forcedUnverified = new Set<string>();
 
     // 到点即中止在途搜索 / 模型请求，并直接进入判决。
@@ -325,9 +326,14 @@ export async function runInvestigation(
         ...(plannedQueries ? { preplanned: plannedQueries } : {}),
         deadline,
         signal: stageSignal,
-        onClaimSkipped: (claimId) => {
-          timedOut = true;
+        onClaimSkipped: (claimId, reason) => {
+          if (reason === 'deadline') {
+            timedOut = true;
+          }
           forcedUnverified.add(claimId);
+        },
+        onLineBroken: () => {
+          lineBroken = true;
         },
       });
     } catch (error) {
@@ -341,7 +347,13 @@ export async function runInvestigation(
     stage(
       'search',
       'done',
-      `共获得 ${sources.length} 条候选来源${timedOut ? '（时间有限，部分疑点未完成搜证）' : ''}`,
+      `共获得 ${sources.length} 条候选来源${
+        lineBroken
+          ? '（线索中断，基于已有证据结案）'
+          : timedOut
+            ? '（时间有限，部分疑点未完成搜证）'
+            : ''
+      }`,
     );
 
     // 3. 分级：网页发布时间补抓与分级并行；超时则直接跳过后续重阶段。
@@ -463,7 +475,11 @@ export async function runInvestigation(
     stage(
       'verdict',
       'start',
-      timedOut ? '时间有限，基于已获取证据直接判决' : '综合证据给出五档判决',
+      lineBroken
+        ? '线索中断，基于已有证据直接判决'
+        : timedOut
+          ? '时间有限，基于已获取证据直接判决'
+          : '综合证据给出五档判决',
     );
     const searchPlans = new Map<string, { executed: number; pro: string[]; con: string[] }>();
     for (const claim of pending) {
@@ -481,6 +497,7 @@ export async function runInvestigation(
         searchPlans,
         deadline,
         timedOut,
+        lineBroken,
         forceUnverifiedClaimIds: forcedUnverified,
         signal: stageSignal,
       });

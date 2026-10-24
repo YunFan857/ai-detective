@@ -1,4 +1,6 @@
 import dotenv from 'dotenv';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { previewClaims } from '../lib/pipeline';
 import type { Mode } from '../types/case';
 
@@ -57,9 +59,14 @@ const RISK_NAMES: Record<string, string> = {
 };
 
 async function main(): Promise<void> {
-  const { text, flags } = parseArgs(process.argv.slice(2));
+  const { text: rawText, flags } = parseArgs(process.argv.slice(2));
+  const fileFlag = flags.get('file');
+  if (fileFlag && rawText) {
+    throw new Error('命令行文本与 --file 只能二选一');
+  }
+  const text = fileFlag ? (await readFile(fileFlag, 'utf8')).trim() : rawText;
   if (!text) {
-    console.error('用法: pnpm run:claims "要拆解的文本" [--mode script]');
+    console.error('用法: pnpm run:claims ("要拆解的文本" | --file <路径>) [--mode script] [--save-as name]');
     process.exitCode = 1;
     return;
   }
@@ -72,6 +79,17 @@ async function main(): Promise<void> {
   console.log(`疑点: ${preview.claims.length} 个 · 单价 ${preview.pricePerClaim} 元/个`);
   console.log(`自动查证: ${preview.autoRun ? '是（仅 1–2 个疑点）' : '否，请勾选后立案'}`);
   console.log(`已保存: .cache/previews/${preview.previewId}.json`);
+
+  const saveAs = flags.get('save-as');
+  if (saveAs) {
+    if (!/^[A-Za-z0-9_-]+$/.test(saveAs)) {
+      throw new Error(`--save-as 名称非法：${saveAs}`);
+    }
+    await mkdir('cache', { recursive: true });
+    const file = path.join('cache', `${saveAs}.json`);
+    await writeFile(file, `${JSON.stringify(preview, null, 2)}\n`, 'utf8');
+    console.log(`已保存演示预览: ${file}`);
+  }
 
   if (preview.claims.length === 0) {
     console.log('\n未拆出可核查疑点。');

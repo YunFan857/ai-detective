@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "run:claims": "tsx scripts/claims.ts",
-    "run:case": "tsx scripts/run.ts"
+    "run:case": "tsx scripts/run.ts",
+    "check:case": "tsx scripts/check-case.ts"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

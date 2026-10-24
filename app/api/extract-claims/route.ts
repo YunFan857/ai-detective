@@ -7,6 +7,7 @@ import path from 'node:path';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { previewClaims } from '../../../lib/pipeline';
+import { findDemoPreviewByInput } from '../../../lib/case-store';
 import {
   ClaimsPreviewSchema,
   InputTypeSchema,
@@ -77,7 +78,9 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     if (process.env.USE_MOCK === 'true') {
-      return NextResponse.json(await loadMockPreview(mode));
+      // 演示模式优先用 cache 里的预热预览，断网也能完成「拆疑点 → 立案」两步。
+      const demo = await findDemoPreviewByInput(text);
+      return NextResponse.json(demo ?? (await loadMockPreview(mode)));
     }
 
     const preview = await previewClaims(text, { mode, inputType: 'text' });

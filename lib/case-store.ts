@@ -15,6 +15,8 @@ import {
 const DEMO_DIR = path.join(process.cwd(), 'cache');
 const CASE_DIR = path.join(process.cwd(), '.cache', 'cases');
 const PREVIEW_DIR = path.join(process.cwd(), '.cache', 'previews');
+/** 默认单价，与流水线保持一致。 */
+const DEFAULT_PRICE_PER_CLAIM = 8;
 
 /** 只接受安全文件名，防止路径穿越。 */
 const SAFE_ID = /^[A-Za-z0-9_-]+$/;
@@ -72,17 +74,72 @@ export async function loadDemoCase(demoId: string): Promise<CaseFile | undefined
   return parsed.success ? parsed.data : undefined;
 }
 
-/** 从 .cache/previews 读回拆疑点预览。 */
+/** 从 .cache/previews、cache/preview-*.json 读回拆疑点预览；必要时由演示卷宗合成。 */
 export async function loadPreview(previewId: string): Promise<ClaimsPreview | undefined> {
   if (!isSafeId(previewId)) {
     return undefined;
   }
-  const raw = await readJson(path.join(PREVIEW_DIR, `${previewId}.json`));
-  if (raw === undefined) {
+
+  for (const file of [
+    path.join(PREVIEW_DIR, `${previewId}.json`),
+    path.join(DEMO_DIR, `${previewId}.json`),
+    path.join(DEMO_DIR, `preview-${previewId}.json`),
+  ]) {
+    const raw = await readJson(file);
+    if (raw === undefined) {
+      continue;
+    }
+    const parsed = ClaimsPreviewSchema.safeParse(raw);
+    if (parsed.success) {
+      return parsed.data;
+    }
+  }
+
+  const demo = await loadDemoCase(previewId);
+  return demo ? caseFileToPreview(demo) : undefined;
+}
+
+/** 把演示卷宗合成预览，保证断网时「拆疑点 → 立案」两步流程仍可演示。 */
+function caseFileToPreview(caseFile: CaseFile): ClaimsPreview {
+  return {
+    previewId: caseFile.id,
+    mode: caseFile.mode ?? 'factcheck',
+    input: caseFile.input,
+    inputType: 'text',
+    claims: caseFile.claims,
+    autoRun: caseFile.claims.length >= 1 && caseFile.claims.length <= 2,
+    pricePerClaim: caseFile.billing?.pricePerClaim ?? DEFAULT_PRICE_PER_CLAIM,
+    createdAt: caseFile.createdAt,
+  };
+}
+
+/** 按输入文本匹配演示预览：先读 cache/preview-*.json，再由演示卷宗合成。 */
+export async function findDemoPreviewByInput(input: string): Promise<ClaimsPreview | undefined> {
+  const normalized = input.trim();
+  if (!normalized) {
     return undefined;
   }
-  const parsed = ClaimsPreviewSchema.safeParse(raw);
-  return parsed.success ? parsed.data : undefined;
+
+  let names: string[];
+  try {
+    names = await readdir(DEMO_DIR);
+  } catch {
+    return undefined;
+  }
+
+  for (const name of names.sort()) {
+    if (!name.startsWith('preview-') || !name.endsWith('.json')) {
+      continue;
+    }
+    const raw = await readJson(path.join(DEMO_DIR, name));
+    const parsed = ClaimsPreviewSchema.safeParse(raw);
+    if (parsed.success && parsed.data.input.trim() === normalized) {
+      return parsed.data;
+    }
+  }
+
+  const demo = await findDemoCaseByInput(normalized);
+  return demo ? caseFileToPreview(demo) : undefined;
 }
 
 /** 列出 cache/ 下所有合法演示卷宗。 */
