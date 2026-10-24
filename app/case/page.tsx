@@ -3,10 +3,11 @@
 import { Suspense, use, useEffect } from 'react';
 import { CaseHeader } from '@/components/case/case-header';
 import { EvidenceGraph } from '@/components/case/evidence-graph';
-import { ProgressFeed } from '@/components/case/progress-feed';
-import { StepButtons } from '@/components/case/step-buttons';
-import { stepOfTier, type StepId } from '@/lib/steps';
+import { ProgressFeed } from '@/components/progress-feed';
+import { StepButtons } from '@/components/step-buttons';
+import type { StepId } from '@/lib/steps';
 import { useInvestigation, type InvestigationState } from '@/lib/use-investigation';
+import { useStepReveal, type StepIndex } from '@/lib/use-step-reveal';
 
 type CaseSearchParams = Pick<PageProps<'/case'>, 'searchParams'>;
 
@@ -20,14 +21,11 @@ function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** 已出现来源里等级最高的一档，决定顶部胶囊和底部步骤条。 */
-function resolveActiveStep(state: InvestigationState): StepId {
-  return state.sourceOrder.reduce<StepId>((current, id) => {
-    const tier = state.sourcesById[id]?.tier;
-    if (!tier) return current;
-    const next = stepOfTier(tier);
-    return next > current ? next : current;
-  }, 1);
+/** 画布当前查看的步骤映射到来源分组；结案时停在自媒体组。 */
+function toStepId(step: StepIndex): StepId {
+  if (step <= 1) return 1;
+  if (step >= 4) return 4;
+  return step === 2 ? 2 : 3;
 }
 
 function resolveSourceLabel(input: string): string {
@@ -38,6 +36,13 @@ function resolveSourceLabel(input: string): string {
   } catch {
     return '链接';
   }
+}
+
+/** 链接立案时，用第一条检索来源的标题补全来源小卡。 */
+function resolveSourceTitle(input: string, state: InvestigationState): string | undefined {
+  if (!/^https?:\/\//i.test(input)) return undefined;
+  const firstSourceId = state.sourceOrder[0];
+  return firstSourceId ? state.sourcesById[firstSourceId]?.title : undefined;
 }
 
 function CaseFallback() {
@@ -62,6 +67,7 @@ export default function CasePage({ searchParams }: PageProps<'/case'>) {
 function CaseContent({ searchParams }: CaseSearchParams) {
   const params = use(searchParams);
   const { state, start } = useInvestigation();
+  const reveal = useStepReveal(state);
 
   const mode = first(params.mode);
   const text = first(params.text)?.trim();
@@ -81,7 +87,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     start({ mode: 'mock' });
   }, [demoId, mode, start, text]);
 
-  const activeStep = resolveActiveStep(state);
+  const activeStep = toStepId(reveal.viewStep);
   const closed = state.status === 'done';
   const input = state.input || text || '';
   const modeLabel = MODE_LABELS[mode ?? 'mock'] ?? '文字立案';
@@ -100,9 +106,9 @@ function CaseContent({ searchParams }: CaseSearchParams) {
       <div className="flex min-h-0 flex-1 gap-3 p-3">
         <ProgressFeed
           sourceLabel={resolveSourceLabel(input)}
-          logs={state.logs}
-          activeStep={activeStep}
-          status={state.status}
+          sourceTitle={resolveSourceTitle(input, state)}
+          state={state}
+          reveal={reveal}
         />
 
         <EvidenceGraph
@@ -116,11 +122,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
       </div>
 
       <div className="shrink-0 px-3 pb-3">
-        <StepButtons
-          activeStep={activeStep}
-          closed={closed}
-          verdictReady={state.verdict !== null && !closed}
-        />
+        <StepButtons reveal={reveal} />
       </div>
     </main>
   );

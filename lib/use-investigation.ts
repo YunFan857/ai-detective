@@ -26,12 +26,26 @@ export type BroadcastLog = {
   message: string;
 };
 
+/** 办案实况需要逐条回放的播报事件，带到达时间。 */
+export type FeedEvent =
+  | { type: 'stage'; at: number; stage: Stage; status: 'start' | 'done'; message: string }
+  | { type: 'source'; at: number; source: Source }
+  | { type: 'groups'; at: number; groups: SourceGroup[] }
+  | { type: 'error'; at: number; message: string; recoverable: boolean }
+  | { type: 'verdict'; at: number; verdict: Verdict };
+
 export type InvestigationState = {
   caseId: string | null;
   input: string;
   status: 'idle' | 'running' | 'done' | 'error';
   currentStage: Stage | null;
   logs: BroadcastLog[];
+  /** 播报流：stage / source / groups / error / verdict 按到达顺序累积。 */
+  feed: FeedEvent[];
+  /** 本案第一条事件的时间，用于播报 mm:ss。 */
+  startedAt: number | null;
+  /** done 事件时间；结案气泡用它计算 mm:ss。 */
+  closedAt: number | null;
   claims: Claim[];
   sourcesById: Record<string, Source>;
   sourceOrder: string[];
@@ -61,6 +75,9 @@ const INITIAL_STATE: InvestigationState = {
   status: 'idle',
   currentStage: null,
   logs: [],
+  feed: [],
+  startedAt: null,
+  closedAt: null,
   claims: [],
   sourcesById: {},
   sourceOrder: [],
@@ -85,7 +102,12 @@ type Action =
 function applyEvent(state: InvestigationState, event: CaseEvent, at: number): InvestigationState {
   switch (event.type) {
     case 'case':
-      return { ...state, caseId: event.id, input: event.input };
+      return {
+        ...state,
+        caseId: event.id,
+        input: event.input,
+        startedAt: state.startedAt ?? at,
+      };
 
     case 'stage':
       return {
@@ -96,6 +118,16 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
           {
             id: `${at}-${event.stage}-${event.status}-${state.logs.length}`,
             timestamp: at,
+            stage: event.stage,
+            status: event.status,
+            message: event.message,
+          },
+        ],
+        feed: [
+          ...state.feed,
+          {
+            type: 'stage',
+            at,
             stage: event.stage,
             status: event.status,
             message: event.message,
@@ -112,6 +144,7 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
         ...state,
         sourcesById: { ...state.sourcesById, [event.source.id]: event.source },
         sourceOrder: known ? state.sourceOrder : [...state.sourceOrder, event.source.id],
+        feed: known ? state.feed : [...state.feed, { type: 'source', at, source: event.source }],
       };
     }
 
@@ -123,13 +156,21 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
     }
 
     case 'groups':
-      return { ...state, groups: event.groups };
+      return {
+        ...state,
+        groups: event.groups,
+        feed: [...state.feed, { type: 'groups', at, groups: event.groups }],
+      };
 
     case 'timeline':
       return { ...state, timelines: { ...state.timelines, [event.claimId]: event.steps } };
 
     case 'verdict':
-      return { ...state, verdict: event.verdict };
+      return {
+        ...state,
+        verdict: event.verdict,
+        feed: [...state.feed, { type: 'verdict', at, verdict: event.verdict }],
+      };
 
     case 'stats':
       return { ...state, stats: event.stats };
@@ -139,6 +180,15 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
         ...state,
         status: event.recoverable ? state.status : 'error',
         errors: [...state.errors, event.message],
+        feed: [
+          ...state.feed,
+          {
+            type: 'error',
+            at,
+            message: event.message,
+            recoverable: event.recoverable,
+          },
+        ],
       };
 
     case 'done':
@@ -147,6 +197,8 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
         caseId: event.caseFile.id,
         input: event.caseFile.input,
         status: 'done',
+        closedAt: at,
+        startedAt: state.startedAt ?? at,
         currentStage: state.currentStage ?? 'verdict',
         claims: event.caseFile.claims,
         sourcesById: Object.fromEntries(
