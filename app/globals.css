@@ -2,28 +2,70 @@
 
 @theme {
   /* 纸面与线条 */
-  --color-paper: #e9f6ee;
-  --color-paper-deep: #d9efdf;
+  --color-paper: #f2fbf6;
+  --color-paper-deep: #d8f0e2;
   --color-card: #fffdf8;
-  --color-beige: #fbf1dd;
-  --color-ink: #1c1c1c;
+  --color-beige: #fff6e3;
+  --color-ink: #1f2329;
 
-  /* 品牌色 */
-  --color-brand: #28a95b;
-  --color-brand-deep: #1f8b4c;
-  --color-brand-soft: #dcf3e3;
-  --color-coral: #e4573d;
-  --color-coral-soft: #fde7e1;
-  --color-tangerine: #e07a1f;
-  --color-tangerine-soft: #fdeed8;
-  --color-sky: #3b7bd9;
-  --color-sky-soft: #e3eeff;
-  --color-muted: #7b7b72;
+  /* 元宝品牌色 */
+  --color-brand: #00b259;
+  --color-brand-dark: #00813f;
+  --color-brand-soft: #e6f7ee;
+  --color-orange: #e37318;
+  --color-orange-soft: #fdf0e4;
+  --color-red: #d54941;
+  --color-red-soft: #fdecea;
+  --color-blue: #366ef4;
+  --color-blue-soft: #e9f0fe;
+  --color-gray: #8a8f98;
+  --color-gray-soft: #f2f3f5;
+  --color-bg: #f2fbf6;
 
-  /* 描边与手绘阴影 */
+  /* 旧 token 别名：与元宝色板对齐，避免历史页面出现两套配色 */
+  --color-brand-deep: #00813f;
+  --color-coral: #d54941;
+  --color-coral-soft: #fdecea;
+  --color-tangerine: #e37318;
+  --color-tangerine-soft: #fdf0e4;
+  --color-sky: #366ef4;
+  --color-sky-soft: #e9f0fe;
+  --color-muted: #8a8f98;
+
+  /* 来源等级：官方 / 媒体 / 自媒体 / 营销号 / 未知 */
+  --color-tier-official: #00b259;
+  --color-tier-official-soft: #e6f7ee;
+  --color-tier-media: #366ef4;
+  --color-tier-media-soft: #e9f0fe;
+  --color-tier-self: #e37318;
+  --color-tier-self-soft: #fdf0e4;
+  --color-tier-marketing: #8a8f98;
+  --color-tier-marketing-soft: #f2f3f5;
+  --color-tier-unknown: #8a8f98;
+  --color-tier-unknown-soft: #f2f3f5;
+
+  /* 五档判决 */
+  --color-verdict-true: #00b259;
+  --color-verdict-true-soft: #e6f7ee;
+  --color-verdict-partly-true: #f2a05b;
+  --color-verdict-partly-true-soft: #fdf1e6;
+  --color-verdict-out-of-context: #e37318;
+  --color-verdict-out-of-context-soft: #fdf0e4;
+  --color-verdict-unverified: #8a8f98;
+  --color-verdict-unverified-soft: #f2f3f5;
+  --color-verdict-false: #d54941;
+  --color-verdict-false-soft: #fdecea;
+
+  /* 字体：900 / 700 / 400 三档，由 next/font 注入 --font-noto */
+  --font-sans:
+    var(--font-noto), 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+
+  /* 漫画描边与硬投影 */
   --shadow-ink: 4px 4px 0 var(--color-ink);
   --shadow-ink-sm: 3px 3px 0 var(--color-ink);
   --shadow-ink-lg: 6px 6px 0 var(--color-ink);
+  --shadow-brand: 4px 4px 0 var(--color-brand);
+  --shadow-brand-sm: 3px 3px 0 var(--color-brand);
 
   --radius-ink: 1.25rem;
 }
@@ -33,10 +75,54 @@
 }
 
 body {
-  background-color: var(--color-paper);
+  background-color: var(--color-bg);
   color: var(--color-ink);
-  font-family:
-    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  /* 漫画卡片：3px 黑描边 + 硬投影 */
+  .comic-card {
+    border: 3px solid var(--color-ink);
+    border-radius: var(--radius-ink);
+    background-color: var(--color-card);
+    box-shadow: 4px 4px 0 var(--color-ink);
+  }
+
+  /* 绿色硬投影卡片，用于高亮主卡片 */
+  .comic-card-green {
+    border: 3px solid var(--color-ink);
+    border-radius: var(--radius-ink);
+    background-color: var(--color-card);
+    box-shadow: 5px 5px 0 var(--color-brand);
+  }
+
+  /* 花字：900 字重 + 白字黑描边 + 彩色硬阴影 */
+  .huazi {
+    font-weight: 900;
+    color: var(--color-white);
+    -webkit-text-stroke: 4px var(--color-ink);
+    paint-order: stroke fill;
+    text-shadow: 3px 3px 0 var(--huazi-shadow, var(--color-brand));
+    letter-spacing: 0.04em;
+    line-height: 1.08;
+  }
+
+  .huazi-orange {
+    --huazi-shadow: var(--color-orange);
+  }
+
+  .huazi-red {
+    --huazi-shadow: var(--color-red);
+  }
+
+  .huazi-blue {
+    --huazi-shadow: var(--color-blue);
+  }
+
+  .huazi-ink {
+    --huazi-shadow: var(--color-ink);
+  }
 }
 
 /* 点阵纸面 + 顶部放射光，来自原型背景 */
@@ -58,19 +144,12 @@ body {
 
 /* 标题：白字 + 黑描边 + 绿色错位投影 */
 .ink-title {
-  color: #fff;
+  color: var(--color-white);
   -webkit-text-stroke: 7px var(--color-ink);
   paint-order: stroke fill;
   text-shadow:
     3px 3px 0 var(--color-brand),
-    6px 6px 0 rgb(28 28 28 / 0.18);
-}
-
-@media (max-width: 640px) {
-  .ink-title {
-    -webkit-text-stroke-width: 5px;
-    text-shadow: 2px 2px 0 var(--color-brand);
-  }
+    6px 6px 0 rgb(31 35 41 / 0.18);
 }
 
 /* 加载/等待用的斜纹 */
@@ -95,4 +174,38 @@ body {
 .wave-bar {
   animation: listening-wave 0.9s ease-in-out infinite;
   transform-origin: center;
+}
+
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.typewriter-caret {
+  animation: caret-blink 1s steps(1) infinite;
+}
+
+@media (max-width: 640px) {
+  .ink-title {
+    -webkit-text-stroke-width: 5px;
+    text-shadow: 2px 2px 0 var(--color-brand);
+  }
+
+  .huazi {
+    -webkit-text-stroke-width: 3px;
+    text-shadow: 2px 2px 0 var(--huazi-shadow, var(--color-brand));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wave-bar,
+  .typewriter-caret {
+    animation: none;
+  }
 }
