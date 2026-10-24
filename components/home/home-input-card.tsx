@@ -113,7 +113,7 @@ export function HomeInputCard() {
                 onClick={() => setMode(item.id)}
                 className={`relative flex items-center gap-1.5 rounded-lg border-2 border-ink px-3 py-1.5 text-sm font-bold transition-transform ${
                   active
-                    ? 'bg-brand text-white shadow-ink-sm [text-shadow:1px_1px_0_#1c1c1c]'
+                    ? 'bg-brand text-white shadow-ink-sm [text-shadow:1px_1px_0_var(--color-ink)]'
                     : 'bg-card text-ink hover:-translate-y-0.5'
                 }`}
               >
@@ -318,7 +318,7 @@ export function HomeInputCard() {
             type="button"
             disabled={!canSubmit}
             onClick={handleSubmit}
-            className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand px-6 py-2.5 text-base font-black text-white shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:border-ink/30 disabled:bg-[#c9cbc6] disabled:text-white/80 disabled:shadow-none"
+            className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand px-6 py-2.5 text-base font-black text-white shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:border-gray disabled:bg-gray-soft disabled:text-gray disabled:shadow-none"
           >
             <DetectiveMascot className="h-5 w-4" />
             立案调查！

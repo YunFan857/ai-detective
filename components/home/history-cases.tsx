@@ -19,7 +19,7 @@ export function HistoryCases() {
   return (
     <section className="mx-auto mt-7 w-full max-w-[860px] px-4">
       <h2 className="flex items-center gap-2 text-sm font-black">
-        <FolderIcon className="h-4 w-4 text-[#e8b22b]" />
+        <FolderIcon className="h-4 w-4 text-tangerine" />
         历史卷宗
         <span className="text-muted">｜</span>
         <span className="font-bold text-muted">点开看名场面</span>

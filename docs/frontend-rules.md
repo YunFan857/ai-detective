@@ -15,7 +15,7 @@
 - 只用 Tailwind 工具类和 `app/globals.css` 里的 token，禁止写死色值（`text-[#e8b22b]`、`style={{ color: '#...' }}` 都不允许）。
 - 现有 token：`paper`、`paper-deep`、`card`、`beige`、`ink`、`brand`、`brand-deep`、`brand-soft`、`coral`、`coral-soft`、`tangerine`、`tangerine-soft`、`sky`、`sky-soft`、`muted`；硬投影 `shadow-ink`、`shadow-ink-sm`、`shadow-ink-lg`；圆角 `radius-ink`。
 - 描边、硬投影、花字统一用工具类：`.comic-card`（卡片描边 + 硬投影）、`.huazi`（标题花字）；页面背景用 `.paper-bg`，等待态用 `.hatch`。
-  - 目前 `globals.css` 已定义 `.paper-bg`、`.ink-title`、`.hatch`、`.wave-bar`；`.comic-card`、`.huazi` 待补进 `globals.css` 后再统一使用，禁止在各组件里重复拼一套。
+  - `globals.css` 已定义 `.paper-bg`、`.ink-title`、`.comic-card`、`.comic-card-green`、`.huazi`、`.hatch`、`.wave-bar`，统一使用，禁止在各组件里重复拼一套。
 - 新工具类只能加在 `app/globals.css`，命名小写连字符；不引入 CSS Module 或 styled-components。
 - SVG 图标 / 插画允许用 `fill`、`stroke`，但优先引用 `--color-*` 变量，不新增散落的十六进制色值。
 
@@ -31,7 +31,7 @@
 - 统一使用 `framer-motion`，不用手写大量 CSS keyframes 做入场 / 切换。
 - 所有动效必须尊重 `prefers-reduced-motion`：用 `useReducedMotion()` 关闭位移、缩放和循环动画，只保留透明度变化。
 - 动效服务于状态变化（阶段推进、新证据入场），不做纯装饰的长时间循环。
-- 注意：`package.json` 目前未声明 `framer-motion`。需要引入时先与 A 确认，不要自行安装依赖。
+- 注意：`package.json` 已声明 `framer-motion`，需要新增其他依赖时仍先与 A 确认，不要自行安装。
 
 ## 5. 原型图
 

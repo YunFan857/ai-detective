@@ -14,7 +14,7 @@ export function HomeHero() {
         <span className="ml-[72px] -rotate-2 rounded-xl border-2 border-ink bg-card px-3.5 py-1.5 text-sm font-bold shadow-ink-sm sm:ml-[104px]">
           这条消息靠谱吗？！
         </span>
-        <span className="rotate-1 rounded-xl border-2 border-ink bg-brand px-4 py-1.5 text-base font-black text-white shadow-ink-sm [text-shadow:1.5px_1.5px_0_#1c1c1c]">
+        <span className="rotate-1 rounded-xl border-2 border-ink bg-brand px-4 py-1.5 text-base font-black text-white shadow-ink-sm [text-shadow:1.5px_1.5px_0_var(--color-ink)]">
           把结论的来路查清楚！
         </span>
       </div>
