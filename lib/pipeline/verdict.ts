@@ -10,6 +10,8 @@ import {
   VerdictSchema,
   type Claim,
   type ClaimVerdict,
+  type Mode,
+  type ScriptLabel,
   type Source,
   type SourceGroup,
   type Stance,
@@ -19,6 +21,7 @@ import {
   type VerdictLevel,
 } from '../../types/case';
 import { chatJSON } from '../llm';
+import { getExecutedSearchPlan } from './search';
 
 /** 每个疑点最多喂给模型的独立证人数 */
 const MAX_WITNESSES_PER_CLAIM = 10;
@@ -41,8 +44,10 @@ const NO_EVIDENCE_HEADLINE = '我不知道';
 /** 单一来源时置信度上限 */
 const SINGLE_CONFIDENCE_CAP = 0.5;
 
-const TEMPERATURE = 0;
+const TEMPERATURE = 0.2;
 const TIMEOUT_MS = 60_000;
+/** 软超时后仍给模型留的最小收尾时间。 */
+const MIN_VERDICT_TIMEOUT_MS = 5_000;
 
 const TIER_RANK: Record<Tier, number> = {
   official: 4,
@@ -631,6 +636,8 @@ async function requestClaimDrafts(
   entries: ClaimEntry[],
   numbering: Numbering,
   sourcesById: Map<string, Source>,
+  timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<Map<string, ClaimDraft>> {
   if (entries.length === 0) {
     return new Map();
@@ -642,7 +649,9 @@ async function requestClaimDrafts(
       user: `待核查原文：${input}\n\n请对以上 ${entries.length} 个疑点逐一判决。`,
       schema: ClaimDraftsSchema,
       temperature: TEMPERATURE,
-      timeoutMs: TIMEOUT_MS,
+      maxTokens: 4_000,
+      timeoutMs,
+      ...(signal ? { signal } : {}),
     });
 
     const valid = new Set(entries.map((entry) => entry.claim.id));
@@ -707,6 +716,8 @@ async function requestOverall(
   claims: Claim[],
   claimVerdicts: ClaimVerdict[],
   numbering: Numbering,
+  timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<z.infer<typeof OverallSchema> | null> {
   try {
     return await chatJSON({
@@ -714,7 +725,9 @@ async function requestOverall(
       user: `请根据以上 ${claimVerdicts.length} 个疑点判决，写出整案结论与辟谣卡。`,
       schema: OverallSchema,
       temperature: TEMPERATURE,
-      timeoutMs: TIMEOUT_MS,
+      maxTokens: 3_000,
+      timeoutMs,
+      ...(signal ? { signal } : {}),
     });
   } catch (error) {
     console.warn(`[verdict] 整案结论生成失败，改用规则文案：${(error as Error).message}`);
@@ -857,22 +870,67 @@ function buildClaimSummary(
   };
 }
 
+function scriptSummary(
+  claim: Claim,
+  label: ScriptLabel,
+  witnesses: Witness[],
+  numbering: Numbering,
+): { summary: string; citationIds: string[] } {
+  const preferred = preferredWitnesses(label === 'fabricated' ? 'false' : 'true', witnesses).slice(0, 2);
+  const used = preferred
+    .map((witness) => witness.source.id)
+    .filter((id) => numbering.byId.has(id));
+  const marks = used.map((id) => `[${numbering.byId.get(id)}]`).join('');
+  const text = claim.text.replace(/[。！？!?；;，,]+$/, '');
+  const tail = label === 'recorded'
+    ? '有官方来源或多条独立来源支持，可按有据记载表述'
+    : label === 'legend'
+      ? '来源只把它作为传说、野史或演义流传，不宜写成正史事实'
+      : label === 'fabricated'
+        ? '官方或权威媒体明确反驳，不能按真实史实发布'
+        : '现有来源不足以确认，不能把它写成确定事实';
+  return {
+    summary: `${text}：${tail}${marks ? ` ${marks}` : ''}。`,
+    citationIds: used,
+  };
+}
+
 function finalizeClaim(
   entry: ClaimEntry,
   draft: ClaimDraft | undefined,
   numbering: Numbering,
   usableIds: Set<string>,
+  mode: Mode = 'factcheck',
+  searchPlan?: SearchPlan,
 ): ClaimVerdict {
   const { level, confidence } = decideLevel(entry.rule, draft);
-  const { summary, citationIds } = buildClaimSummary(entry, level, draft, numbering, usableIds);
+  const scriptLabel = mode === 'scriptcheck' ? scriptLabelFor(entry) : undefined;
+  const scriptRule = scriptLabel
+    ? {
+        level: scriptLabel === 'recorded' ? ('true' as const) : scriptLabel === 'fabricated' ? ('false' as const) : ('unverified' as const),
+        confidence: scriptLabel === 'doubtful' ? 0.3 : 0.8,
+      }
+    : null;
+  const finalRule = scriptRule ?? { level, confidence };
+  const scriptText = scriptLabel ? scriptSummary(entry.claim, scriptLabel, entry.witnesses, numbering) : null;
+  const finalSummary = scriptText ?? buildClaimSummary(entry, finalRule.level, draft, numbering, usableIds);
+  if (mode === 'scriptcheck' && !entry.witnesses.some((witness) => witness.stance !== 'irrelevant')) {
+    const plans = new Map<string, SearchPlan>();
+    if (searchPlan) plans.set(entry.claim.id, searchPlan);
+    finalSummary.summary = '我不知道。' + buildNoEvidenceSummary(
+      [entry.claim], entry.witnesses.map((witness) => witness.source), plans,
+    );
+  }
 
   return {
     claimId: entry.claim.id,
-    level,
-    confidence,
-    summary,
-    citationIds,
+    level: finalRule.level,
+    confidence: finalRule.confidence,
+    summary: finalSummary.summary,
+    citationIds: finalSummary.citationIds,
     ...(entry.conflict ? { conflict: entry.conflict } : {}),
+    ...(scriptLabel ? { scriptLabel, ...(scriptLabel !== 'recorded' ? { rewrite: buildRewrite(entry.claim, scriptLabel) } : {}) } : {}),
+    ...(mode === 'scriptcheck' ? { searches: searchPlan?.executed ?? 0 } : {}),
   };
 }
 
@@ -1054,11 +1112,33 @@ function computeEvidenceState(entries: ClaimEntry[]): EvidenceState {
   return ids.size === 1 ? 'single' : 'none';
 }
 
-/** 零证人时如实交代查过什么、看了多少、为什么确认不了。 */
-function buildNoEvidenceSummary(claims: Claim[], sources: Source[]): string {
-  const queries = [...new Set(sources.map((source) => source.query.trim()).filter(Boolean))];
-  const queryText = queries.length
-    ? queries.map((query) => `「${clip(query, 24)}」`).join('、')
+function scriptOverallSummary(
+  claimVerdicts: ClaimVerdict[],
+  searchPlans: ReadonlyMap<string, SearchPlan> = new Map(),
+  noEvidenceSummary?: string,
+): string {
+  const labels = claimVerdicts.map((item) => item.scriptLabel ?? 'doubtful');
+  const counts = { recorded: 0, legend: 0, doubtful: 0, fabricated: 0 };
+  labels.forEach((label) => { counts[label] += 1; });
+  const searches = [...(searchPlans?.values() ?? [])].reduce((sum, plan) => sum + plan.executed, 0);
+  if (noEvidenceSummary) return `我不知道。${noEvidenceSummary} 发布前体检：正史 ${counts.recorded} 个、传说 ${counts.legend} 个、存疑 ${counts.doubtful} 个、编造 ${counts.fabricated} 个；实际搜索 ${searches} 次。`;
+  return `发布前体检：正史 ${counts.recorded} 个、传说 ${counts.legend} 个、存疑 ${counts.doubtful} 个、编造 ${counts.fabricated} 个；实际搜索 ${searches} 次。${labels.length === 0 ? '没有可核查疑点。' : '请按各疑点标签改写，勿把传说或存疑内容写成确定事实。'}`;
+}
+
+function buildNoEvidenceSummary(
+  claims: Claim[],
+  sources: Source[],
+  searchPlans?: ReadonlyMap<string, SearchPlan>,
+): string {
+  const queries = [
+    ...new Set([
+      ...sources.map((source) => source.query.trim()),
+      ...[...(searchPlans?.values() ?? [])].flatMap((plan) => [...plan.pro, ...plan.con]),
+    ].filter(Boolean)),
+  ];
+  const uniqueQueries = [...new Set(queries)];
+  const queryText = uniqueQueries.length
+    ? uniqueQueries.map((query) => `「${clip(query, 24)}」`).join('、')
     : '（没有可用的检索词）';
   const claimText = claims.map((claim) => `「${clip(claim.text, 30)}」`).join('、');
 
@@ -1071,6 +1151,81 @@ function buildNoEvidenceSummary(claims: Claim[], sources: Source[]): string {
   return `我查了${queryText}这些检索词，看了 ${sources.length} 条来源（${reachText}），围绕${claimText}没有找到能直接支撑或反驳的独立来源，所以无法确认这条消息的真假。`;
 }
 
+type SearchPlan = { executed: number; pro: string[]; con: string[] };
+
+function isEncyclopediaSource(witness: Witness): boolean {
+  return /百科|维基百科|百度百科|互动百科/.test(
+    `${witness.source.site} ${witness.source.title}`,
+  );
+}
+
+function scriptLabelFor(entry: ClaimEntry): ScriptLabel {
+  const active = entry.witnesses.filter((witness) => witness.stance !== 'irrelevant');
+  if (active.length === 0) return 'doubtful';
+
+  const supporters = active.filter((witness) => witness.stance === 'support');
+  const refuters = active.filter((witness) => witness.stance === 'refute');
+  const highRefute = refuters.some((witness) => isAuthoritative(witness.tier));
+  // scriptcheck 的优先级高于支持证据：权威反驳即判为编造。
+  if (highRefute) return 'fabricated';
+
+  const officialSupport = supporters.some((witness) => witness.tier === 'official' && !isEncyclopediaSource(witness));
+  const mediaSupport = supporters.some((witness) => witness.tier === 'media' && !isEncyclopediaSource(witness));
+  const allEncyclopedia = supporters.every(isEncyclopediaSource);
+
+  const isLegend = (witness: Witness): boolean => {
+    const text = `${witness.source.title} ${witness.source.snippet}`;
+    const cleaned = text.replace(/(?:并不是|并不属于|不属于|并非|不是|非)(?:一个|一则|一段|一部)?(?:民间)?(?:传说|野史|演义)/g, '');
+    return /传说|野史|演义/.test(cleaned);
+  };
+  const legendCount = active.filter(isLegend).length;
+  const generallyLegend = legendCount > active.length / 2 &&
+    active.filter((witness) => isAuthoritative(witness.tier)).every(isLegend);
+  const selfMarketingLegend = active.every((witness) =>
+    (witness.tier === 'self' || witness.tier === 'marketing') && isLegend(witness),
+  );
+  if (generallyLegend || selfMarketingLegend) return 'legend';
+  if (officialSupport || (supporters.length >= 2 && mediaSupport && !allEncyclopedia)) {
+    return 'recorded';
+  }
+  return 'doubtful';
+}
+
+function buildRewrite(claim: Claim, label: ScriptLabel): string {
+  const original = (claim.sentence ?? claim.text).trim();
+  if (label === 'recorded') return original;
+
+  const qualifier = label === 'legend' ? '（传说）' : label === 'fabricated' ? '（权威反驳）' : '（存疑）';
+  const max = Math.max(1, Math.floor([...original].length * 1.3));
+  const tailStart = original.search(/(?:点个赞|点赞|关注|评论|转发|私信|下单|书中|链接|想了解|感兴趣)/);
+  const tail = tailStart > 0 ? original.slice(tailStart) : '';
+  const fact = tailStart > 0 ? original.slice(0, tailStart) : original;
+  const candidate = `${fact}${qualifier}${tail}`;
+  if ([...candidate].length <= max) return candidate;
+
+  const status = label === 'legend' ? '传说' : label === 'fabricated' ? '已驳' : '存疑';
+  for (const prefix of [`${status}：`, `${status}·`]) {
+    const qualified = `${prefix}${original}`;
+    if (charLength(qualified) <= max) return qualified;
+  }
+  // 不截断事实句，以免丢失否定或条件后产生新含义；行动尾句保持原样。
+  for (const notice of [
+    label === 'fabricated' ? '权威已反驳。' : label === 'legend' ? '此为传说。' : '此说存疑。',
+    `${status}。`,
+    status,
+  ]) {
+    if (charLength(notice + tail) <= max) return notice + tail;
+  }
+  return '疑';
+}
+
+function scriptHeadline(labels: ScriptLabel[]): string {
+  const counts = { recorded: 0, legend: 0, doubtful: 0, fabricated: 0 };
+  labels.forEach((label) => { counts[label] += 1; });
+  return `查证 ${labels.length} 个疑点：正史 ${counts.recorded} / 野史 ${counts.legend} / 存疑 ${counts.doubtful} / 编造 ${counts.fabricated}`;
+}
+
+
 /**
  * 判决：逐疑点出结论，再综合成整案判决与辟谣卡。
  * 模型失败只降级文案，不抛错；引用编号以 sources 顺序为准。
@@ -1081,19 +1236,47 @@ export async function makeVerdict(
   sources: Source[],
   groups: SourceGroup[],
   timelines: Record<string, TimelineStep[]>,
+  opts?: {
+    mode?: Mode;
+    searchPlans?: ReadonlyMap<string, SearchPlan>;
+    /** 软截止时间（epoch ms）。 */
+    deadline?: number;
+    /** 是否已因软超时提前进入判决。 */
+    timedOut?: boolean;
+    /** 超时未完成核查、必须按「我不知道」处理的疑点。 */
+    forceUnverifiedClaimIds?: ReadonlySet<string>;
+    /** 软超时取消信号，用于中止在途判决请求。 */
+    signal?: AbortSignal;
+  },
 ): Promise<Verdict> {
   if (claims.length === 0) {
-    return buildEmptyVerdict();
+    const empty = buildEmptyVerdict();
+    if (opts?.mode !== 'scriptcheck') return empty;
+    return VerdictSchema.parse({
+      ...empty,
+      headline: scriptHeadline([]),
+      summary: '我不知道。未拆出疑点，没有可核查的具体事实。',
+      rebuttalCard: {
+        title: '发布前体检结果',
+        body: composeBody(undefined, [], '发布前体检：无可核查疑点。'),
+      },
+    });
   }
 
-  // 先校验链接：不可达的来源不参与判决，也不允许被引用
-  const checked = await checkReachability(sources);
+  // 先校验链接：不可达的来源不参与判决，也不允许被引用。
+  // 软超时后跳过逐个探测，直接用已有证据收尾，避免再花 5–10 秒。
+  const skipReachability =
+    opts?.timedOut === true ||
+    (opts?.deadline !== undefined && Date.now() >= opts.deadline - 2_000);
+  const checked = skipReachability
+    ? sources.map((source) => ({ ...source, reachable: true }))
+    : await checkReachability(sources);
   const reachableById = new Map(checked.map((source) => [source.id, source.reachable === true]));
   for (const source of sources) {
     source.reachable = reachableById.get(source.id) ?? false;
   }
   const usable = checked.filter((source) => source.reachable === true);
-  const usableIds = new Set(usable.map((source) => source.id));
+  const usableIds = new Set<string>(usable.map((source) => source.id));
 
   const numbering = buildNumbering(checked);
   const sourcesById = new Map(checked.map((source) => [source.id, source]));
@@ -1122,16 +1305,74 @@ export async function makeVerdict(
     };
   });
 
-  const drafts = await requestClaimDrafts(input, entries, numbering, sourcesById);
-  const claimVerdicts = entries.map((entry) =>
-    finalizeClaim(entry, drafts.get(entry.claim.id), numbering, usableIds),
+  const effectivePlans = new Map<string, SearchPlan>();
+  for (const claim of claims) {
+    const explicit = opts?.searchPlans?.get(claim.id);
+    const actual = explicit ?? getExecutedSearchPlan(claim);
+    if (actual) effectivePlans.set(claim.id, actual);
+  }
+
+  const remainingMs = opts?.deadline !== undefined ? opts.deadline - Date.now() : TIMEOUT_MS;
+  const skipModel = opts?.timedOut === true || remainingMs <= 0;
+  const llmTimeoutMs = Math.max(
+    MIN_VERDICT_TIMEOUT_MS,
+    Math.min(TIMEOUT_MS, remainingMs),
   );
 
+  const drafts =
+    opts?.mode === 'scriptcheck' || skipModel
+      ? new Map<string, ClaimDraft>()
+      : await requestClaimDrafts(
+          input,
+          entries,
+          numbering,
+          sourcesById,
+          llmTimeoutMs,
+          opts?.signal,
+        );
+  const forced = opts?.forceUnverifiedClaimIds;
+  const claimVerdicts = entries
+    .map((entry) =>
+      finalizeClaim(
+        entry,
+        drafts.get(entry.claim.id),
+        numbering,
+        usableIds,
+        opts?.mode,
+        effectivePlans.get(entry.claim.id),
+      ),
+    )
+    .map((item) =>
+      forced?.has(item.claimId)
+        ? {
+            ...item,
+            level: 'unverified' as const,
+            confidence: 0.2,
+            summary: '我不知道。时间有限，未完成该疑点的证据核查。',
+            citationIds: [],
+          }
+        : item,
+    );
+
   const aggregate = aggregateVerdicts(claimVerdicts);
-  const overall = await requestOverall(input, claims, claimVerdicts, numbering);
+  const overall =
+    opts?.mode === 'scriptcheck' || skipModel
+      ? null
+      : await requestOverall(
+          input,
+          claims,
+          claimVerdicts,
+          numbering,
+          llmTimeoutMs,
+          opts?.signal,
+        );
 
   const summaryResult = sanitizeSummary(overall?.summary ?? '', numbering, usableIds);
   const evidenceState = computeEvidenceState(entries);
+
+  const noEvidenceSummary = evidenceState === 'none'
+    ? buildNoEvidenceSummary(claims, checked, effectivePlans)
+    : undefined;
 
   let level: VerdictLevel = aggregate.level;
   let confidence = aggregate.confidence;
@@ -1141,14 +1382,33 @@ export async function makeVerdict(
   if (evidenceState === 'none') {
     level = 'unverified';
     confidence = round2(Math.min(confidence, 0.1));
-    headline = NO_EVIDENCE_HEADLINE;
-    summary = buildNoEvidenceSummary(claims, checked);
+    headline = opts?.mode === 'scriptcheck' ? scriptHeadline(claimVerdicts.map((item) => item.scriptLabel ?? 'doubtful')) : NO_EVIDENCE_HEADLINE;
+    summary = opts?.mode === 'scriptcheck'
+      ? scriptOverallSummary(claimVerdicts, effectivePlans, noEvidenceSummary)
+      : buildNoEvidenceSummary(claims, checked, opts?.searchPlans);
   } else if (evidenceState === 'single') {
-    headline = SINGLE_HEADLINE;
+    headline = opts?.mode === 'scriptcheck' ? scriptHeadline(claimVerdicts.map((item) => item.scriptLabel ?? 'doubtful')) : SINGLE_HEADLINE;
     confidence = round2(Math.min(confidence, SINGLE_CONFIDENCE_CAP));
-    summary = `${SINGLE_HEADLINE}，暂无法交叉印证，结论只能按${LEVEL_NAMES[level]}处理。${summary}`;
+    summary = opts?.mode === 'scriptcheck'
+      ? scriptOverallSummary(claimVerdicts, effectivePlans, noEvidenceSummary)
+      : `${SINGLE_HEADLINE}，暂无法交叉印证，结论只能按${LEVEL_NAMES[level]}处理。${summary}`;
   } else {
-    headline = fitHeadline(overall?.headline, level);
+    headline = opts?.mode === 'scriptcheck'
+      ? scriptHeadline(claimVerdicts.map((item) => item.scriptLabel ?? 'doubtful'))
+      : fitHeadline(overall?.headline, level);
+  }
+
+  if (opts?.mode === 'scriptcheck') {
+    summary = scriptOverallSummary(claimVerdicts, effectivePlans, noEvidenceSummary);
+  }
+
+  const endedAfterDeadline =
+    opts?.deadline !== undefined && Date.now() >= opts.deadline;
+  if (
+    (opts?.timedOut || endedAfterDeadline) &&
+    !summary.includes('时间有限，基于已获取证据结案')
+  ) {
+    summary = `${summary}${summary ? ' ' : ''}时间有限，基于已获取证据结案。`;
   }
 
   const cited = new Set<string>(summaryResult.used);
@@ -1167,8 +1427,16 @@ export async function makeVerdict(
     summary,
     claims: claimVerdicts,
     rebuttalCard: {
-      title: fitTitle(overall?.rebuttalCard.title, level),
-      body: composeBody(overall?.rebuttalCard.body, sites, FALLBACK_BODIES[level]),
+      title: opts?.mode === 'scriptcheck' ? '发布前体检结果' : fitTitle(overall?.rebuttalCard.title, level),
+      body: composeBody(
+        opts?.mode === 'scriptcheck' ? undefined : overall?.rebuttalCard.body,
+        sites,
+        opts?.mode === 'scriptcheck'
+          ? (evidenceState === 'none'
+            ? noEvidenceSummary ?? '我不知道，暂未找到可核对证据。'
+            : scriptHeadline(claimVerdicts.map((item) => item.scriptLabel ?? 'doubtful')))
+          : FALLBACK_BODIES[level],
+      ),
     },
   });
 }

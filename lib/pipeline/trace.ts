@@ -205,14 +205,29 @@ async function fetchPublishedAt(url: string): Promise<string | undefined> {
   }
 }
 
-/** 为缺时间的 support/refute 来源补发布时间，每个疑点最多抓 10 条。 */
-async function fillPublishedDates(
+export type FillPublishedDatesOptions = {
+  /** true 时不限立场，可在分级前与 grade 并行预热发布时间。 */
+  anyStance?: boolean;
+  /** 每个疑点最多补抓的来源数，默认 10。 */
+  maxPerClaim?: number;
+  /** 软截止时间（epoch ms）；到点后不再发起新的抓取。 */
+  deadline?: number;
+};
+
+/**
+ * 为缺时间的来源补发布时间，每个疑点默认最多抓 10 条。
+ * 返回 sourceId → publishedAt，方便调用方在并行阶段结束后合并。
+ */
+export async function fillPublishedDates(
   claims: Claim[],
   sources: Source[],
   emit: (event: CaseEvent) => void,
-): Promise<void> {
+  options: FillPublishedDatesOptions = {},
+): Promise<Map<string, string>> {
   const limit = pLimit(FETCH_CONCURRENCY);
   const tasks: Promise<void>[] = [];
+  const filled = new Map<string, string>();
+  const maxPerClaim = options.maxPerClaim ?? MAX_FETCH_PER_CLAIM;
 
   for (const claim of claims) {
     const pending = sources
@@ -220,18 +235,24 @@ async function fillPublishedDates(
         (source) =>
           source.claimId === claim.id &&
           !source.publishedAt &&
-          (source.stance === 'support' || source.stance === 'refute'),
+          (options.anyStance === true ||
+            source.stance === 'support' ||
+            source.stance === 'refute'),
       )
-      .slice(0, MAX_FETCH_PER_CLAIM);
+      .slice(0, maxPerClaim);
 
     for (const source of pending) {
       tasks.push(
         limit(async () => {
+          if (options.deadline !== undefined && Date.now() >= options.deadline) {
+            return;
+          }
           const publishedAt = await fetchPublishedAt(source.url);
           if (!publishedAt) return;
 
           // 原地补齐，供后续判决与卷宗直接复用
           source.publishedAt = publishedAt;
+          filled.set(source.id, publishedAt);
           emit({ type: 'source_update', id: source.id, patch: { publishedAt } });
         }),
       );
@@ -239,6 +260,7 @@ async function fillPublishedDates(
   }
 
   await Promise.all(tasks);
+  return filled;
 }
 
 function parseTime(value: string | undefined): number {
@@ -355,14 +377,17 @@ async function requestQuotes(
   nodes: Source[],
   groupIds: Map<string, string>,
   emit: (event: CaseEvent) => void,
+  signal?: AbortSignal,
 ): Promise<TimelineDraft | null> {
   try {
     return await chatJSON({
       system: buildTimelinePrompt(claim, nodes, groupIds),
       user: `请为以上 ${nodes.length} 个节点提取 quote 并描述 mutation。`,
       schema: TimelineDraftSchema,
-      temperature: 0,
+      temperature: 0.2,
+      maxTokens: 5_000,
       timeoutMs: 60_000,
+      ...(signal ? { signal } : {}),
     });
   } catch (error) {
     const detail =
@@ -412,6 +437,13 @@ function buildSteps(nodes: Source[], draft: TimelineDraft | null): TimelineStep[
   });
 }
 
+export type TraceOptions = {
+  /** 软截止时间（epoch ms）；到点后不再抓取或调用模型。 */
+  deadline?: number;
+  /** 软超时取消信号，用于中止在途摘句请求。 */
+  signal?: AbortSignal;
+};
+
 /**
  * 还原每个疑点的变形时间线：补时间 → 选节点 → 模型摘句与描述走样 → 推送事件。
  * 节点不足两个时返回空数组，不抛错。
@@ -421,21 +453,33 @@ export async function traceTimeline(
   sources: Source[],
   groups: SourceGroup[],
   emit: (event: CaseEvent) => void,
+  options: TraceOptions = {},
 ): Promise<Record<string, TimelineStep[]>> {
-  await fillPublishedDates(claims, sources, emit);
+  await fillPublishedDates(claims, sources, emit, { deadline: options.deadline });
+
+  // 各疑点的摘句请求互相独立，并行发出；事件仍按原疑点顺序推送。
+  const results = await Promise.all(
+    claims.map(async (claim) => {
+      if (options.deadline !== undefined && Date.now() >= options.deadline) {
+        return { claimId: claim.id, steps: [] };
+      }
+      const nodes = selectTimelineNodes(claim, sources, groups);
+      const groupIds = collectGroupIds(claim, nodes, groups);
+      const steps =
+        nodes.length < MIN_NODES
+          ? []
+          : buildSteps(
+              nodes,
+              await requestQuotes(claim, nodes, groupIds, emit, options.signal),
+            );
+      return { claimId: claim.id, steps };
+    }),
+  );
 
   const timelines: Record<string, TimelineStep[]> = {};
-
-  for (const claim of claims) {
-    const nodes = selectTimelineNodes(claim, sources, groups);
-    const groupIds = collectGroupIds(claim, nodes, groups);
-    const steps =
-      nodes.length < MIN_NODES
-        ? []
-        : buildSteps(nodes, await requestQuotes(claim, nodes, groupIds, emit));
-
-    timelines[claim.id] = steps;
-    emit({ type: 'timeline', claimId: claim.id, steps });
+  for (const { claimId, steps } of results) {
+    timelines[claimId] = steps;
+    emit({ type: 'timeline', claimId, steps });
   }
 
   return timelines;

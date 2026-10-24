@@ -2,16 +2,18 @@
  * 流水线第二步：正反搜证。
  * 每个疑点生成 pro / con 两组搜索词，并行检索后按 url 去重、按相关度截断。
  */
+import pLimit from 'p-limit';
 import { z } from 'zod';
-import { SourceSchema, type CaseEvent, type Claim, type Source } from '../../types/case';
+import { SourceSchema, type CaseEvent, type Claim, type Mode, type Source } from '../../types/case';
 import { chatJSON, type ChatJsonOptions } from '../llm';
 import { createSearchBudget, type SearchResult } from '../yuanbao';
 
+/** 疑点级并发上限：配合元宝 3 路并发，避免一次排满所有检索词。 */
+const CLAIM_CONCURRENCY = 2;
 const RESULTS_PER_QUERY = 6;
 /** 元宝只接受 Cnt=10 等固定档位，取 10 条后本地截取 6 条 */
 const REQUEST_CNT = 10;
 const MAX_SOURCES_PER_CLAIM = 15;
-const SEARCH_BUDGET = 10;
 /** 修复请求里回传上一次输出的长度上限，避免提示词过长 */
 const REPAIR_OUTPUT_LIMIT = 1200;
 
@@ -23,10 +25,26 @@ const QueryPlanSchema = z.strictObject({
 
 type QueryPlanData = z.infer<typeof QueryPlanSchema>;
 
-type QueryCounts = {
+export type QueryCounts = {
   pro: number;
   con: number;
 };
+
+/** 每疑点默认 1 条 pro + 2 条 con，共 3 次搜索；可用环境变量或调用参数覆盖。 */
+export const DEFAULT_QUERY_COUNTS: QueryCounts = { pro: 1, con: 2 };
+
+function envCount(name: string, fallback: number): number {
+  const raw = Number(process.env[name]);
+  return Number.isInteger(raw) && raw > 0 && raw <= 5 ? raw : fallback;
+}
+
+/** 合并调用参数与环境变量，最终限制在 1–5 条之间。 */
+export function resolveQueryCounts(overrides?: Partial<QueryCounts>): QueryCounts {
+  const pro = overrides?.pro ?? envCount('SEARCH_PRO_COUNT', DEFAULT_QUERY_COUNTS.pro);
+  const con = overrides?.con ?? envCount('SEARCH_CON_COUNT', DEFAULT_QUERY_COUNTS.con);
+  const clamp = (value: number): number => Math.min(5, Math.max(1, Math.trunc(value)));
+  return { pro: clamp(pro), con: clamp(con) };
+}
 
 /** 外部依赖，测试可注入桩函数，避免真实调用模型。 */
 export type SearchDeps = {
@@ -54,8 +72,28 @@ export type GatherEvidenceOptions = {
   deps?: SearchDeps;
   /** 演示模式：每个疑点 1 条 pro + 2 条 con，最多 3 个疑点共 9 次搜索 */
   demo?: boolean;
+  mode?: Mode;
+  perClaimLimit?: number;
+  /** 覆盖每疑点的 pro / con 条数，默认取环境变量或 1 pro + 2 con。 */
+  queryCounts?: Partial<QueryCounts>;
+  /** 拆疑点阶段一并生成的检索词；命中时不再单独调用模型。 */
+  preplanned?: ReadonlyMap<string, { pro: string[]; con: string[] }>;
+  /** 软截止时间（epoch ms）；到点后尚未开始的疑点不再搜证。 */
+  deadline?: number;
+  /** 因软截止时间未开始搜证的疑点。 */
+  onClaimSkipped?: (claimId: string) => void;
+  /** 软超时取消信号，用于中止在途搜索与检索词生成。 */
+  signal?: AbortSignal;
   onPlan?: (plan: ClaimQueryPlan) => void;
 };
+
+const executedPlans = new WeakMap<Claim, ClaimQueryPlan>();
+
+/** 查询疑点在本次搜证中实际执行的检索计划；未参与搜证时返回 undefined。 */
+export function getExecutedSearchPlan(claim: Claim): ClaimQueryPlan | undefined {
+  const plan = executedPlans.get(claim);
+  return plan ? { ...plan, pro: [...plan.pro], con: [...plan.con] } : undefined;
+}
 
 type Direction = 'pro' | 'con';
 
@@ -69,14 +107,6 @@ type QueryTask = PlannedQuery & {
   results: Promise<SearchResult[]>;
 };
 
-function isDemoMode(): boolean {
-  return process.env.USE_MOCK === 'true';
-}
-
-function queryCounts(demo: boolean): QueryCounts {
-  return demo ? { pro: 1, con: 2 } : { pro: 2, con: 2 };
-}
-
 /** 用疑点原文拼出完整 JSON 示例，避免模型照抄无意义的占位符。 */
 function buildExample(claimText: string, counts: QueryCounts): string {
   const seed = claimText.length > 24 ? claimText.slice(0, 24) : claimText;
@@ -87,14 +117,17 @@ function buildExample(claimText: string, counts: QueryCounts): string {
   return JSON.stringify({ pro, con });
 }
 
-function buildQueryPrompt(claimText: string, counts: QueryCounts): string {
+function buildQueryPrompt(claimText: string, counts: QueryCounts, mode: Mode = 'factcheck'): string {
+  const scriptcheckHints = mode === 'scriptcheck'
+    ? '\n- scriptcheck 额外关注：pro 加入史料、记载、出处、原文方向；con 加入考证、辟谣、史学界、真实情况方向。'
+    : '';
   return `你是检索策略师，为事实核查生成搜索词。
 
 疑点：${claimText}
 
 只允许输出一个 JSON 对象，且只允许包含 pro 和 con 两个字段。禁止使用 queries、keywords、support、refute、reason、result 等任何其他字段。
 - pro：${counts.pro} 条，用于「试图证实」该疑点的检索词，寻找支持该说法的证据；
-- con：${counts.con} 条，用于「辟谣 / 真相 / 原文 / 出处」方向的检索词，寻找反驳、澄清和原始出处。
+- con：${counts.con} 条，用于「辟谣 / 真相 / 原文 / 出处」方向的检索词，寻找反驳、澄清和原始出处。${scriptcheckHints}
 
 完整 JSON 示例（字段名、数组结构和元素类型必须完全一致）：
 ${buildExample(claimText, counts)}
@@ -106,8 +139,11 @@ ${buildExample(claimText, counts)}
 4. 只输出上述 JSON 对象，不要 Markdown 代码块、注释或解释。`;
 }
 
-function buildRepairPrompt(claimText: string, counts: QueryCounts): string {
-  return `你是 JSON 结构修复器。上一次为事实核查疑点生成搜索词时，输出的 JSON 不符合约定，请只修复结构，不要改变检索意图。
+function buildRepairPrompt(claimText: string, counts: QueryCounts, mode: Mode = 'factcheck'): string {
+  const scriptcheckHints = mode === 'scriptcheck'
+    ? '\n- scriptcheck 额外关注：pro 加入史料、记载、出处、原文方向；con 加入考证、辟谣、史学界、真实情况方向。'
+    : '';
+  return `你是 JSON 结构修复器。上一次为事实核查疑点生成搜索词时，输出的 JSON 不符合约定，请只修复结构，不要改变检索意图。${scriptcheckHints}
 
 疑点：${claimText}
 
@@ -156,13 +192,17 @@ async function requestPlan(
   counts: QueryCounts,
   emit: (event: CaseEvent) => void,
   deps: SearchDeps,
+  mode: Mode = 'factcheck',
+  signal?: AbortSignal,
 ): Promise<{ plan: QueryPlanData; repaired: boolean }> {
   const raw = await deps.chat({
-    system: buildQueryPrompt(claim.text, counts),
+    system: buildQueryPrompt(claim.text, counts, mode),
     user: claim.text,
     schema: z.unknown(),
-    temperature: 0,
+    temperature: 0.2,
+    maxTokens: 1_000,
     timeoutMs: 60_000,
+    ...(signal ? { signal } : {}),
   });
 
   const parsed = QueryPlanSchema.safeParse(raw);
@@ -178,11 +218,13 @@ async function requestPlan(
   });
 
   const repairedRaw = await deps.chat({
-    system: buildRepairPrompt(claim.text, counts),
+    system: buildRepairPrompt(claim.text, counts, mode),
     user: `上一次输出：${stringifyForRepair(raw)}\n校验错误：${issues}`,
     schema: z.unknown(),
-    temperature: 0,
+    temperature: 0.2,
+    maxTokens: 1_000,
     timeoutMs: 60_000,
+    ...(signal ? { signal } : {}),
   });
 
   const repaired = QueryPlanSchema.safeParse(repairedRaw);
@@ -196,7 +238,13 @@ async function requestPlan(
 }
 
 /** 最终兜底：不再调用模型，用疑点原文生成确定性检索词。 */
-function fallbackQueries(claim: Claim): { pro: string[]; con: string[] } {
+function fallbackQueries(claim: Claim, mode: Mode = 'factcheck'): { pro: string[]; con: string[] } {
+  if (mode === 'scriptcheck') {
+    return {
+      pro: [`${claim.text} 史料 原文`],
+      con: [`${claim.text} 考证 史学界`, `${claim.text} 辟谣 真实情况`],
+    };
+  }
   return {
     pro: [claim.text],
     con: [`${claim.text} 辟谣`, `${claim.text} 真相 原文 出处`],
@@ -208,12 +256,15 @@ export async function planClaimQueries(
   claim: Claim,
   emit: (event: CaseEvent) => void,
   deps: SearchDeps = defaultDeps,
-  demo = isDemoMode(),
+  demoOrMode: boolean | Mode = false,
+  mode: Mode = typeof demoOrMode === 'string' ? demoOrMode : 'factcheck',
+  countOverrides?: Partial<QueryCounts>,
+  signal?: AbortSignal,
 ): Promise<ClaimQueryPlan> {
-  const counts = queryCounts(demo);
+  const counts = resolveQueryCounts(countOverrides);
 
   try {
-    const { plan, repaired } = await requestPlan(claim, counts, emit, deps);
+    const { plan, repaired } = await requestPlan(claim, counts, emit, deps, mode, signal);
     return {
       claimId: claim.id,
       pro: plan.pro.slice(0, counts.pro),
@@ -229,7 +280,7 @@ export async function planClaimQueries(
       message: `疑点 ${claim.id} 搜索词生成失败：${(error as Error).message}`,
     });
 
-    const fallback = fallbackQueries(claim);
+    const fallback = fallbackQueries(claim, mode);
     emit({
       type: 'stage',
       stage: 'search',
@@ -294,54 +345,102 @@ export async function gatherEvidence(
   }
 
   const deps = options.deps ?? defaultDeps;
-  const demo = options.demo ?? isDemoMode();
-  const budget = createSearchBudget(SEARCH_BUDGET);
-  const plans = await Promise.all(claims.map((claim) => planClaimQueries(claim, emit, deps, demo)));
-
+  const mode = options.mode ?? 'factcheck';
+  const counts = resolveQueryCounts(options.queryCounts);
+  const perClaimLimit = options.perClaimLimit ?? counts.pro + counts.con;
   const tasks: QueryTask[] = [];
 
-  plans.forEach((plan, index) => {
-    const claim = claims[index];
-    const desired = interleaveQueries(plan);
-    let executed = 0;
-
-    for (const item of desired) {
-      if (budget.remaining() <= 0) {
-        break;
+  // 拆疑点阶段已生成检索词的疑点不再单独调用模型；其余并行补生成。
+  const plans = await Promise.all(
+    claims.map((claim): Promise<ClaimQueryPlan> | ClaimQueryPlan => {
+      const pre = options.preplanned?.get(claim.id);
+      if (pre && pre.pro.length > 0 && pre.con.length > 0) {
+        return {
+          claimId: claim.id,
+          pro: pre.pro.slice(0, counts.pro),
+          con: pre.con.slice(0, counts.con),
+          fallback: false,
+          repaired: false,
+          executed: 0,
+        };
       }
-      tasks.push({
-        claim,
-        direction: item.direction,
-        query: item.query,
-        results: budget
-          .search(item.query, { cnt: REQUEST_CNT })
-          .then((results) => results.slice(0, RESULTS_PER_QUERY))
-          .catch((error: unknown) => {
-            emit({
-              type: 'error',
-              message: `搜索「${item.query}」失败：${(error as Error).message}`,
-              recoverable: true,
-            });
-            return [];
-          }),
-      });
-      executed += 1;
-    }
+      return planClaimQueries(claim, emit, deps, false, mode, counts, options.signal);
+    }),
+  );
 
-    plan.executed = executed;
-    options.onPlan?.(plan);
+  // 疑点级并发 2：既保持吞吐，又能在软超时后及时跳过未开始的疑点。
+  const claimLimit = pLimit(CLAIM_CONCURRENCY);
+  await Promise.all(
+    plans.map((plan, index) =>
+      claimLimit(async () => {
+        const claim = claims[index];
 
-    if (executed < desired.length) {
-      emit({
-        type: 'error',
-        message: `疑点 ${claim.id} 搜索预算不足，${desired.length - executed} 条检索词未执行（单案上限 ${SEARCH_BUDGET} 次）`,
-        recoverable: true,
-      });
-    }
-  });
+        if (options.deadline !== undefined && Date.now() >= options.deadline) {
+          options.onClaimSkipped?.(claim.id);
+          emit({
+            type: 'error',
+            message: `疑点 ${claim.id} 因时间不足未开始搜证，按「我不知道」处理`,
+            recoverable: true,
+          });
+          return;
+        }
 
-  // 全部搜索并行；yuanbao 内部已有并发限制
-  await Promise.all(tasks.map((task) => task.results));
+        emit({ type: 'claim_progress', claimId: claim.id, status: 'searching' });
+        const desired = interleaveQueries(plan);
+        const budget = createSearchBudget(perClaimLimit);
+        const claimTasks: QueryTask[] = [];
+        let executed = 0;
+
+        for (const item of desired) {
+          if (budget.remaining() <= 0) {
+            break;
+          }
+          const task: QueryTask = {
+            claim,
+            direction: item.direction,
+            query: item.query,
+            results: budget
+              .search(item.query, {
+                cnt: REQUEST_CNT,
+                ...(options.signal ? { signal: options.signal } : {}),
+              })
+              .then((results) => results.slice(0, RESULTS_PER_QUERY))
+              .catch((error: unknown) => {
+                emit({
+                  type: 'error',
+                  message: `搜索「${item.query}」失败：${(error as Error).message}`,
+                  recoverable: true,
+                });
+                return [];
+              }),
+          };
+          tasks.push(task);
+          claimTasks.push(task);
+          executed += 1;
+        }
+
+        const actual = desired.slice(0, executed);
+        const actualPlan: ClaimQueryPlan = {
+          ...plan,
+          executed,
+          pro: actual.filter((item) => item.direction === 'pro').map((item) => item.query),
+          con: actual.filter((item) => item.direction === 'con').map((item) => item.query),
+        };
+        executedPlans.set(claim, actualPlan);
+        options.onPlan?.(actualPlan);
+
+        if (executed < desired.length) {
+          emit({
+            type: 'error',
+            message: `疑点 ${claim.id} 搜索预算不足，${desired.length - executed} 条检索词未执行（单疑点上限 ${perClaimLimit} 次）`,
+            recoverable: true,
+          });
+        }
+
+        await Promise.all(claimTasks.map((task) => task.results));
+      }),
+    ),
+  );
 
   const sources: Source[] = [];
   let sequence = 0;

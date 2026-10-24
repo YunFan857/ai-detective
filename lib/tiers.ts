@@ -17,6 +17,13 @@ const OFFICIAL_DOMAINS = [
   'thelancet.com',
   'nejm.org',
   'piyao.org.cn',
+  'ctext.org',
+  'dswxyjy.org.cn',
+  'dangshi.people.com.cn',
+  'xuexi.cn',
+  'dpm.org.cn',
+  'chnmuseum.cn',
+  'cass.cn',
 ];
 
 const OFFICIAL_NAME_HINTS = [
@@ -37,6 +44,8 @@ const OFFICIAL_NAME_HINTS = [
   'pubmed',
 ];
 
+const INSTITUTION_NAME_HINTS = ['博物馆', '纪念馆'];
+
 const MEDIA_DOMAINS = [
   'people.com.cn',
   'xinhuanet.com',
@@ -53,7 +62,15 @@ const MEDIA_DOMAINS = [
 
 const MEDIA_NAME_HINTS = ['人民网', '新华网', '央视', '中国新闻网', '澎湃新闻', '财新', '光明网'];
 
-const SELF_DOMAINS = ['zhihu.com', 'bilibili.com', 'weixin.qq.com', 'douban.com', 'jianshu.com'];
+const SELF_DOMAINS = [
+  'zhihu.com',
+  'bilibili.com',
+  'weixin.qq.com',
+  'douban.com',
+  'jianshu.com',
+  'baike.baidu.com',
+  'zh.wikipedia.org',
+];
 
 /** 内容农场与聚合平台：整站默认营销号，Sohu / 网易仅自媒体频道命中。 */
 const MARKETING_DOMAINS = ['baijiahao.baidu.com', 'toutiao.com'];
@@ -101,6 +118,14 @@ export function tierByDomain(site: string): Tier | null {
     return 'official';
   }
   if (OFFICIAL_NAME_HINTS.some((hint) => raw.includes(hint))) {
+    return 'official';
+  }
+
+  if (
+    host &&
+    INSTITUTION_NAME_HINTS.some((hint) => raw.includes(hint)) &&
+    ['gov.cn', 'edu.cn', 'org.cn'].some((suffix) => matchesDomain(host, suffix))
+  ) {
     return 'official';
   }
 

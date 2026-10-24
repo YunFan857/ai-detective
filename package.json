@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "run:claims": "tsx scripts/claims.ts",
     "run:case": "tsx scripts/run.ts"
   },
   "dependencies": {

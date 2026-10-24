@@ -9,8 +9,12 @@ import type { ZodError, ZodType } from 'zod';
 export const llmStats = { calls: 0, tokens: 0 };
 
 const DEFAULT_TIMEOUT_MS = 20_000;
+/** 统一采样温度：0.2 兼顾事实任务的稳定性与表达自然度。 */
+const DEFAULT_TEMPERATURE = 0.2;
+/** 默认输出上限；各阶段可按需要覆盖。 */
+const DEFAULT_MAX_TOKENS = 4_000;
 const MAX_VALIDATION_RETRIES = 2;
-const EMBEDDING_BATCH_SIZE = 32;
+const DEFAULT_EMBEDDING_BATCH_SIZE = 64;
 const JSON_ONLY_INSTRUCTION =
   '你必须只输出一个合法的 JSON 对象，不要输出 Markdown 代码块、注释或任何解释性文字。';
 
@@ -32,7 +36,11 @@ export type ChatJsonOptions<T> = {
   user: string;
   schema: ZodType<T>;
   temperature?: number;
+  /** 输出 token 上限；不传时使用全局默认值。 */
+  maxTokens?: number;
   timeoutMs?: number;
+  /** 外部取消信号；软超时到点时用于中止在途请求。 */
+  signal?: AbortSignal;
 };
 
 type Runtime = {
@@ -142,7 +150,13 @@ function extractFirstJson(text: string): unknown {
 
 async function requestCompletion(
   messages: ChatMessage[],
-  options: { temperature: number; timeoutMs: number; jsonMode: boolean },
+  options: {
+    temperature: number;
+    maxTokens: number;
+    timeoutMs: number;
+    jsonMode: boolean;
+    signal?: AbortSignal;
+  },
 ): Promise<string> {
   const { client, model } = resolveRuntime();
   const response = await client.chat.completions.create(
@@ -150,9 +164,14 @@ async function requestCompletion(
       model,
       messages,
       temperature: options.temperature,
+      max_tokens: options.maxTokens,
       response_format: options.jsonMode ? { type: 'json_object' } : undefined,
     },
-    { timeout: options.timeoutMs, maxRetries: 0 },
+    {
+      timeout: options.timeoutMs,
+      maxRetries: 0,
+      ...(options.signal ? { signal: options.signal } : {}),
+    },
   );
 
   llmStats.calls += 1;
@@ -170,7 +189,15 @@ async function requestCompletion(
  * 校验失败会把错误回传给模型重试（最多 2 次）；超时重试 1 次。
  */
 export async function chatJSON<T>(options: ChatJsonOptions<T>): Promise<T> {
-  const { system, user, schema, temperature = 0.2, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+  const {
+    system,
+    user,
+    schema,
+    temperature = DEFAULT_TEMPERATURE,
+    maxTokens = DEFAULT_MAX_TOKENS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+  } = options;
 
   const messages: ChatMessage[] = [
     { role: 'system', content: `${system}\n\n${JSON_ONLY_INSTRUCTION}` },
@@ -184,7 +211,13 @@ export async function chatJSON<T>(options: ChatJsonOptions<T>): Promise<T> {
   for (;;) {
     let raw: string;
     try {
-      raw = await requestCompletion(messages, { temperature, timeoutMs, jsonMode });
+      raw = await requestCompletion(messages, {
+        temperature,
+        maxTokens,
+        timeoutMs,
+        jsonMode,
+        ...(signal ? { signal } : {}),
+      });
     } catch (error) {
       if (jsonMode && isJsonModeUnsupported(error)) {
         jsonMode = false;
@@ -235,7 +268,7 @@ export async function chatJSON<T>(options: ChatJsonOptions<T>): Promise<T> {
 }
 
 /**
- * 向量化：每次最多 32 条。
+ * 向量化：默认每次最多 64 条，可用 EMBEDDING_BATCH_SIZE 调整。
  * 未配置 EMBEDDING_MODEL 时抛出 LlmError，方便上层降级为关键词匹配。
  */
 export async function embed(texts: string[]): Promise<number[][]> {
@@ -246,9 +279,12 @@ export async function embed(texts: string[]): Promise<number[][]> {
   const model = readEnv('EMBEDDING_MODEL', '无法生成向量，上层请降级为关键词匹配');
   const { client } = resolveRuntime();
   const vectors: number[][] = [];
+  const configured = Number(process.env.EMBEDDING_BATCH_SIZE);
+  const batchSize =
+    Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_EMBEDDING_BATCH_SIZE;
 
-  for (let start = 0; start < texts.length; start += EMBEDDING_BATCH_SIZE) {
-    const batch = texts.slice(start, start + EMBEDDING_BATCH_SIZE);
+  for (let start = 0; start < texts.length; start += batchSize) {
+    const batch = texts.slice(start, start + batchSize);
     const response = await client.embeddings.create(
       // 部分网关只接受 float，SDK 默认的 base64 会被 400 拒绝
       { model, input: batch, encoding_format: 'float' },

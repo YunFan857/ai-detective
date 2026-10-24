@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     check('正常输出不产生错误事件', !events.some((event) => event.type === 'error'));
   }
 
-  // 1b. 非演示模式取 2 条 pro + 2 条 con
+  // 1b. 非演示模式同样固定 1 条 pro + 2 条 con
   {
     const deps = createDeps([
       {
@@ -80,7 +80,10 @@ async function main(): Promise<void> {
       },
     ]);
     const plan = await planClaimQueries(CLAIM, () => {}, deps, false);
-    check('非演示模式取 2 条 pro + 2 条 con', plan.pro.length === 2 && plan.con.length === 2);
+    check(
+      '非演示模式取 1 条 pro + 2 条 con',
+      plan.pro.length === 1 && plan.con.length === 2 && plan.pro[0] === '秦始皇陵 水银 证据',
+    );
   }
 
   // 2. 模型返回 {queries: [...]}，先走一次修复

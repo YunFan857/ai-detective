@@ -4,6 +4,7 @@
  * 再用并查集合并疑似同源的来源，最后让大模型复核每个多人组。
  * 每条来源都会落到一个组里（无关来源单独成组），保证 groupId 完整。
  */
+import pLimit from 'p-limit';
 import { z } from 'zod';
 import type { CaseEvent, Claim, Source, SourceGroup, Tier } from '../../types/case';
 import { chatJSON, embed } from '../llm';
@@ -14,6 +15,8 @@ const COSINE_THRESHOLD = 0.88;
 const JACCARD_THRESHOLD = 0.45;
 /** 少于 2 条成员的组不送模型复核 */
 const MIN_REVIEW_SIZE = 2;
+/** 同源复核并发上限；各疑点之间共享，避免串行等待。 */
+const REVIEW_CONCURRENCY = 3;
 
 const ReviewSchema = z.object({
   keep: z.array(z.string()),
@@ -35,18 +38,23 @@ const IRRELEVANT_REASON = '立场与疑点无关，单独成组。';
 /** 外部依赖，测试可注入桩函数以保证结果可重复。 */
 export type ClusterDeps = {
   embed: (texts: string[]) => Promise<number[][]>;
-  review: (members: Source[]) => Promise<{ keep: string[]; reason: string }>;
+  review: (
+    members: Source[],
+    signal?: AbortSignal,
+  ) => Promise<{ keep: string[]; reason: string }>;
 };
 
 const defaultDeps: ClusterDeps = {
   embed: (texts) => embed(texts),
-  review: (members) =>
+  review: (members, signal) =>
     chatJSON({
       system: buildReviewPrompt(members),
       user: `请复核以上 ${members.length} 条来源是否同源。`,
       schema: ReviewSchema,
-      temperature: 0,
+      temperature: 0.2,
+      maxTokens: 2_000,
       timeoutMs: 60_000,
+      ...(signal ? { signal } : {}),
     }),
 };
 
@@ -128,10 +136,7 @@ async function tryEmbed(
 }
 
 /** 同一疑点内的相似度矩阵判定：余弦命中或 Jaccard 命中都算疑似同源。 */
-async function similarPairs(
-  list: Source[],
-  embedTexts: ClusterDeps['embed'],
-): Promise<boolean[][]> {
+function similarPairs(list: Source[], vectors: number[][] | null): boolean[][] {
   const count = list.length;
   const result = Array.from({ length: count }, () => Array<boolean>(count).fill(false));
   if (count < 2) {
@@ -140,7 +145,6 @@ async function similarPairs(
 
   const texts = list.map((source) => `${source.title}${source.snippet}`);
   const gramSets = texts.map((text) => trigrams(text));
-  const vectors = await tryEmbed(texts, embedTexts);
 
   for (let i = 0; i < count; i += 1) {
     for (let j = i + 1; j < count; j += 1) {
@@ -230,9 +234,10 @@ async function reviewGroup(
   members: Source[],
   emit: (event: CaseEvent) => void,
   review: ClusterDeps['review'],
+  signal?: AbortSignal,
 ): Promise<{ kept: Source[]; reason: string }> {
   try {
-    const result = await review(members);
+    const result = await review(members, signal);
 
     const validIds = new Set(members.map((source) => source.id));
     const keepIds = new Set(result.keep.filter((id) => validIds.has(id)));
@@ -259,12 +264,12 @@ type GroupDraft = {
 };
 
 /** 对一个疑点下的来源做相似度聚类，返回未编号的分组草稿。 */
-async function clusterClaim(list: Source[], deps: ClusterDeps): Promise<GroupDraft[]> {
+function clusterClaim(list: Source[], vectors: number[][] | null): GroupDraft[] {
   if (list.length === 0) {
     return [];
   }
 
-  const matrix = await similarPairs(list, deps.embed);
+  const matrix = similarPairs(list, vectors);
   const dsu = new DisjointSet(list.length);
   for (let i = 0; i < list.length; i += 1) {
     for (let j = i + 1; j < list.length; j += 1) {
@@ -304,11 +309,19 @@ type PendingGroup = {
 };
 
 /** 按疑点分组、合并同源并推送事件，最后返回全部同源组。 */
+export type ClusterOptions = {
+  /** 软截止时间（epoch ms）；到点后不再发起新的模型复核。 */
+  deadline?: number;
+  /** 软超时取消信号，用于中止在途复核。 */
+  signal?: AbortSignal;
+};
+
 export async function clusterSources(
   claims: Claim[],
   sources: Source[],
   emit: (event: CaseEvent) => void,
   deps: ClusterDeps = defaultDeps,
+  options: ClusterOptions = {},
 ): Promise<SourceGroup[]> {
   if (sources.length === 0) {
     emit({ type: 'groups', groups: [] });
@@ -326,69 +339,102 @@ export async function clusterSources(
     }
   }
 
-  const pending: PendingGroup[] = [];
-
+  const relevantByClaim = new Map<string, Source[]>();
   for (const claimId of claimOrder) {
     const list = byClaim.get(claimId) ?? [];
-    const relevant = list.filter((source) => source.stance !== 'irrelevant');
-    const irrelevant = list.filter((source) => source.stance === 'irrelevant');
-
-    for (const source of irrelevant) {
-      pending.push({
-        claimId,
-        sources: [source],
-        originSourceId: source.id,
-        reason: IRRELEVANT_REASON,
-      });
-    }
-
-    const drafts = await clusterClaim(relevant, deps);
-    for (const draft of drafts) {
-      if (draft.members.length < MIN_REVIEW_SIZE) {
-        const [only] = draft.members;
-        pending.push({
-          claimId,
-          sources: [only],
-          originSourceId: only.id,
-          reason: SINGLETON_REASON,
-        });
-        continue;
-      }
-
-      const { kept, reason } = await reviewGroup(draft.members, emit, deps.review);
-      if (kept.length < MIN_REVIEW_SIZE) {
-        // 复核后不足两条：全部拆成独立组
-        for (const source of draft.members) {
-          pending.push({
-            claimId,
-            sources: [source],
-            originSourceId: source.id,
-            reason: SINGLETON_REASON,
-          });
-        }
-        continue;
-      }
-
-      const keptIds = new Set(kept.map((source) => source.id));
-      pending.push({
-        claimId,
-        sources: kept,
-        originSourceId: pickOrigin(kept).id,
-        reason,
-      });
-      for (const source of draft.members) {
-        if (!keptIds.has(source.id)) {
-          pending.push({
-            claimId,
-            sources: [source],
-            originSourceId: source.id,
-            reason: SINGLETON_REASON,
-          });
-        }
-      }
-    }
+    relevantByClaim.set(
+      claimId,
+      list.filter((source) => source.stance !== 'irrelevant'),
+    );
   }
 
+  const deadline = options.deadline;
+  const deadlineReached = (): boolean => deadline !== undefined && Date.now() >= deadline;
+
+  // 所有疑点共用一次 embedding 批量请求；失败时整批降级为 3-gram Jaccard。
+  const allTexts = claimOrder.flatMap((claimId) =>
+    (relevantByClaim.get(claimId) ?? []).map((source) => `${source.title}${source.snippet}`),
+  );
+  const allVectors = deadlineReached() ? null : await tryEmbed(allTexts, deps.embed);
+  const vectorsByClaim = new Map<string, number[][] | null>();
+  let offset = 0;
+  for (const claimId of claimOrder) {
+    const count = relevantByClaim.get(claimId)?.length ?? 0;
+    vectorsByClaim.set(claimId, allVectors ? allVectors.slice(offset, offset + count) : null);
+    offset += count;
+  }
+
+  const reviewLimit = pLimit(REVIEW_CONCURRENCY);
+
+  // 各疑点并行聚类与复核；最终仍按 claimOrder 顺序拼接，保证 groupId 稳定。
+  const perClaim = await Promise.all(
+    claimOrder.map(async (claimId) => {
+      const list = byClaim.get(claimId) ?? [];
+      const relevant = relevantByClaim.get(claimId) ?? [];
+      const groups: PendingGroup[] = list
+        .filter((source) => source.stance === 'irrelevant')
+        .map((source) => ({
+          claimId,
+          sources: [source],
+          originSourceId: source.id,
+          reason: IRRELEVANT_REASON,
+        }));
+
+      const drafts = clusterClaim(relevant, vectorsByClaim.get(claimId) ?? null);
+      const reviewed = await Promise.all(
+        drafts.map(async (draft) => {
+          if (draft.members.length < MIN_REVIEW_SIZE) {
+            return { draft, kept: draft.members, reason: SINGLETON_REASON };
+          }
+          // 软超时后不再发起新的复核，保留相似度初筛结果。
+          if (deadlineReached()) {
+            return { draft, kept: draft.members, reason: SAME_SOURCE_FALLBACK_REASON };
+          }
+          const result = await reviewLimit(() =>
+            reviewGroup(draft.members, emit, deps.review, options.signal),
+          );
+          return { draft, ...result };
+        }),
+      );
+
+      for (const { draft, kept, reason } of reviewed) {
+        if (kept.length < MIN_REVIEW_SIZE) {
+          // 单成员或复核后不足两条：全部拆成独立组
+          for (const source of draft.members) {
+            groups.push({
+              claimId,
+              sources: [source],
+              originSourceId: source.id,
+              reason: SINGLETON_REASON,
+            });
+          }
+          continue;
+        }
+
+        const keptIds = new Set(kept.map((source) => source.id));
+        groups.push({
+          claimId,
+          sources: kept,
+          originSourceId: pickOrigin(kept).id,
+          reason,
+        });
+        for (const source of draft.members) {
+          if (!keptIds.has(source.id)) {
+            groups.push({
+              claimId,
+              sources: [source],
+              originSourceId: source.id,
+              reason: SINGLETON_REASON,
+            });
+          }
+        }
+      }
+
+      return groups;
+    }),
+  );
+
+  const pending = perClaim.flat();
   const groups: SourceGroup[] = pending.map((item, index) => ({
     id: `g${index + 1}`,
     claimId: item.claimId,

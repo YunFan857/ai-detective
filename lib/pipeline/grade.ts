@@ -8,6 +8,7 @@ import {
   TierSchema,
   type CaseEvent,
   type Claim,
+  type Mode,
   type Source,
   type Tier,
 } from '../../types/case';
@@ -33,6 +34,7 @@ type Grade = {
 };
 
 type Batch = {
+  claimId: string;
   claimText: string;
   items: Source[];
 };
@@ -59,6 +61,7 @@ function buildBatches(claims: Claim[], sources: Source[]): Batch[] {
     const list = byClaim.get(claimId) ?? [];
     for (let start = 0; start < list.length; start += BATCH_SIZE) {
       batches.push({
+        claimId,
         claimText: claimTexts.get(claimId) ?? '',
         items: list.slice(start, start + BATCH_SIZE),
       });
@@ -67,7 +70,7 @@ function buildBatches(claims: Claim[], sources: Source[]): Batch[] {
   return batches;
 }
 
-function buildPrompt(batch: Batch): string {
+function buildPrompt(batch: Batch, mode: Mode = 'factcheck'): string {
   const rows = batch.items
     .map((source) => {
       const knownTier = tierByDomain(source.url) ?? tierByDomain(source.site);
@@ -82,7 +85,10 @@ function buildPrompt(batch: Batch): string {
     })
     .join('\n\n');
 
-  return `你是事实核查编辑，判断每条来源对疑点的立场与可信度。
+  const scriptcheckGuidance = mode === 'scriptcheck'
+    ? '\n- scriptcheck 优先识别史书原文、学术论文、博物馆、党史权威机构；指出“相传/据说/演义”类表述。'
+    : '';
+  return `你是事实核查编辑，判断每条来源对疑点的立场与可信度。${scriptcheckGuidance}
 
 疑点：${batch.claimText || '（未提供疑点文本）'}
 
@@ -105,6 +111,8 @@ ${rows}
 async function gradeBatch(
   batch: Batch,
   emit: (event: CaseEvent) => void,
+  mode: Mode = 'factcheck',
+  signal?: AbortSignal,
 ): Promise<Map<string, Grade>> {
   const knownTiers = new Map(
     batch.items.map((source) => [source.id, tierByDomain(source.url) ?? tierByDomain(source.site)]),
@@ -112,11 +120,13 @@ async function gradeBatch(
 
   try {
     const result = await chatJSON({
-      system: buildPrompt(batch),
+      system: buildPrompt(batch, mode),
       user: `请判断以上 ${batch.items.length} 条来源。`,
       schema: GradeResultSchema,
-      temperature: 0,
+      temperature: 0.2,
+      maxTokens: 4_000,
       timeoutMs: 60_000,
+      ...(signal ? { signal } : {}),
     });
 
     const grades = new Map<string, Grade>();
@@ -159,15 +169,33 @@ export async function gradeSources(
   claims: Claim[],
   sources: Source[],
   emit: (event: CaseEvent) => void,
+  options: { mode?: Mode; signal?: AbortSignal } = {},
 ): Promise<Source[]> {
   if (sources.length === 0) {
+    for (const claim of claims) {
+      emit({ type: 'claim_progress', claimId: claim.id, status: 'grading' });
+    }
     return [];
   }
 
   const batches = buildBatches(claims, sources);
+  const gradingClaimIds = new Set(claims.map((claim) => claim.id));
+  for (const claim of claims) {
+    emit({ type: 'claim_progress', claimId: claim.id, status: 'grading' });
+  }
   const batchResults = await Promise.all(
     batches.map(async (batch) => {
-      const grades = await gradeBatch(batch, emit);
+      const claimId = batch.claimId;
+      if (claimId && !gradingClaimIds.has(claimId)) {
+        gradingClaimIds.add(claimId);
+        emit({ type: 'claim_progress', claimId, status: 'grading' });
+      }
+      const grades = await gradeBatch(
+        batch,
+        emit,
+        options.mode ?? 'factcheck',
+        options.signal,
+      );
       for (const source of batch.items) {
         const grade = grades.get(source.id);
         if (grade) {
