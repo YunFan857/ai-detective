@@ -1,0 +1,78 @@
+{
+  "previewId": "preview-script-001",
+  "mode": "scriptcheck",
+  "inputType": "text",
+  "input": "以下是虚构历史带货口播演示，所有情节及资料仅用于界面测试，不可作为史实依据。今天翻开这本《海防人物故事》，先看一位将军的处境：海风吹过城墙，军营里有人擦拭长枪，也有人等待家书。戚继光是明代抗倭将领。可镜头转到民间，故事就变得热闹起来。据说戚继光少年时靠卖柴供弟弟读书。一根扁担、一条山路，把寒门少年的形象立住了，可这样的细节到底来自哪里？这本书宣称他在台州仅用三千人击退十万敌军。数字一出来，观众很容易热血上头，却未必有空追问统计口径。他还被说成是从未打过败仗的将军。越是肯定的话，越应该停下来看看限定条件。传闻他曾在军营题写“先护百姓，再论功名”。这句话适合做封面，但漂亮不等于有出处。更有人断言戚家军取胜全靠祖传药方。听到这里，先别急着下单。我们可以喜欢历史人物，也可以欣赏故事写法，但要把记载、传说与待考之处分开。这本书适合怎样阅读，应该由可靠材料和清楚标注来说明，而不是让情绪替证据作答。",
+  "inputTitle": "《海防人物故事》口播演示",
+  "claims": [
+    {
+      "id": "sc1",
+      "text": "戚继光是明代抗倭将领。",
+      "kind": "person",
+      "riskLevel": "low",
+      "category": "person",
+      "signals": ["人物身份明确", "朝代与职务可核查"],
+      "consequence": "身份若错会误导整段人物叙事。",
+      "sentence": "戚继光是明代抗倭将领。",
+      "span": { "start": 88, "end": 99 }
+    },
+    {
+      "id": "sc2",
+      "text": "据说戚继光少年时靠卖柴供弟弟读书。",
+      "kind": "person",
+      "riskLevel": "low",
+      "category": "person",
+      "signals": ["据说", "贫寒经历细节"],
+      "consequence": "未经出处的苦难细节可能被包装成真实经历。",
+      "sentence": "据说戚继光少年时靠卖柴供弟弟读书。",
+      "span": { "start": 117, "end": 134 }
+    },
+    {
+      "id": "sc3",
+      "text": "戚继光在台州仅用三千人击退十万敌军。",
+      "kind": "number",
+      "riskLevel": "high",
+      "category": "number",
+      "signals": ["三千对十万", "仅用", "战果数字悬殊"],
+      "consequence": "夸大的兵力数字会制造传奇化战绩。",
+      "sentence": "这本书宣称他在台州仅用三千人击退十万敌军。",
+      "span": { "start": 169, "end": 190 }
+    },
+    {
+      "id": "sc4",
+      "text": "戚继光从未打过败仗。",
+      "kind": "other",
+      "riskLevel": "high",
+      "category": "superlative",
+      "signals": ["从未", "绝对化评价", "缺少限定条件"],
+      "consequence": "绝对化战绩会掩盖战事背景与不同记载。",
+      "sentence": "他还被说成是从未打过败仗的将军。",
+      "span": { "start": 218, "end": 234 }
+    },
+    {
+      "id": "sc5",
+      "text": "戚继光曾在军营题写“先护百姓，再论功名”。",
+      "kind": "other",
+      "riskLevel": "medium",
+      "category": "quote",
+      "signals": ["引号内金句", "传闻", "缺少原始出处"],
+      "consequence": "无出处的引语容易被误当作人物原话。",
+      "sentence": "传闻他曾在军营题写“先护百姓，再论功名”。",
+      "span": { "start": 254, "end": 275 }
+    },
+    {
+      "id": "sc6",
+      "text": "戚家军取胜全靠祖传药方。",
+      "kind": "causal",
+      "riskLevel": "medium",
+      "category": "causal",
+      "signals": ["全靠", "祖传药方", "单一因果"],
+      "consequence": "单因果叙事会遮蔽训练、制度与战术等因素。",
+      "sentence": "更有人断言戚家军取胜全靠祖传药方。",
+      "span": { "start": 294, "end": 311 }
+    }
+  ],
+  "autoRun": false,
+  "pricePerClaim": 8,
+  "createdAt": "2026-10-24T09:00:00.000Z"
+}

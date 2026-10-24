@@ -47,7 +47,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## 调用规范
 
 - 所有大模型调用只走 `lib/llm.ts`，业务代码不得直接实例化 SDK。
-- 所有搜索只走 `lib/yuanbao.ts`，单案搜索 ≤10 次。
+- 所有搜索只走 `lib/yuanbao.ts`，每个疑点搜索 ≤3 次，单次查证最多 10 个疑点；拆疑点不调用搜索。
 - 开发期走本地缓存（`USE_MOCK=true` 与 `cache/`），避免消耗额度。
 
 ## 契约规则

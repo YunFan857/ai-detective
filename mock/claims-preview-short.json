@@ -1,0 +1,34 @@
+{
+  "previewId": "preview-short-001",
+  "mode": "factcheck",
+  "input": "朋友圈提醒：本市明天所有公交免费乘坐。消息还说活动将连续举办三十天。请大家核实后再转发。",
+  "inputType": "text",
+  "inputTitle": "朋友圈交通优惠消息",
+  "claims": [
+    {
+      "id": "sh1",
+      "text": "本市明天所有公交免费乘坐。",
+      "kind": "other",
+      "riskLevel": "high",
+      "category": "place",
+      "signals": ["朋友圈提醒", "所有公交", "明天"],
+      "consequence": "可能造成集中出行和现场拥堵。",
+      "sentence": "本市明天所有公交免费乘坐。",
+      "span": { "start": 6, "end": 19 }
+    },
+    {
+      "id": "sh2",
+      "text": "活动将连续举办三十天。",
+      "kind": "time",
+      "riskLevel": "medium",
+      "category": "time",
+      "signals": ["连续三十天", "活动期限"],
+      "consequence": "错误期限可能导致持续误传和出行安排失误。",
+      "sentence": "活动将连续举办三十天。",
+      "span": { "start": 23, "end": 34 }
+    }
+  ],
+  "autoRun": true,
+  "pricePerClaim": 8,
+  "createdAt": "2026-10-24T09:10:00.000Z"
+}
