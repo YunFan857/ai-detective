@@ -1,0 +1,587 @@
+[
+  {
+    "type": "case",
+    "id": "case-script-001",
+    "input": "以下是虚构历史带货口播演示，所有情节及资料仅用于界面测试，不可作为史实依据。今天翻开这本《海防人物故事》，先看一位将军的处境：海风吹过城墙，军营里有人擦拭长枪，也有人等待家书。戚继光是明代抗倭将领。可镜头转到民间，故事就变得热闹起来。据说戚继光少年时靠卖柴供弟弟读书。一根扁担、一条山路，把寒门少年的形象立住了，可这样的细节到底来自哪里？这本书宣称他在台州仅用三千人击退十万敌军。数字一出来，观众很容易热血上头，却未必有空追问统计口径。他还被说成是从未打过败仗的将军。越是肯定的话，越应该停下来看看限定条件。传闻他曾在军营题写“先护百姓，再论功名”。这句话适合做封面，但漂亮不等于有出处。更有人断言戚家军取胜全靠祖传药方。听到这里，先别急着下单。我们可以喜欢历史人物，也可以欣赏故事写法，但要把记载、传说与待考之处分开。这本书适合怎样阅读，应该由可靠材料和清楚标注来说明，而不是让情绪替证据作答。",
+    "delayMs": 0
+  },
+  {
+    "type": "claims",
+    "claims": [
+      {
+        "id": "sc1",
+        "text": "戚继光是明代抗倭将领。",
+        "kind": "person",
+        "riskLevel": "low",
+        "category": "person",
+        "signals": ["人物身份明确", "朝代与职务可核查"],
+        "consequence": "身份若错会误导整段人物叙事。",
+        "sentence": "戚继光是明代抗倭将领。",
+        "span": { "start": 88, "end": 99 }
+      },
+      {
+        "id": "sc2",
+        "text": "据说戚继光少年时靠卖柴供弟弟读书。",
+        "kind": "person",
+        "riskLevel": "low",
+        "category": "person",
+        "signals": ["据说", "贫寒经历细节"],
+        "consequence": "未经出处的苦难细节可能被包装成真实经历。",
+        "sentence": "据说戚继光少年时靠卖柴供弟弟读书。",
+        "span": { "start": 117, "end": 134 }
+      },
+      {
+        "id": "sc3",
+        "text": "戚继光在台州仅用三千人击退十万敌军。",
+        "kind": "number",
+        "riskLevel": "high",
+        "category": "number",
+        "signals": ["三千对十万", "仅用", "战果数字悬殊"],
+        "consequence": "夸大的兵力数字会制造传奇化战绩。",
+        "sentence": "这本书宣称他在台州仅用三千人击退十万敌军。",
+        "span": { "start": 169, "end": 190 }
+      },
+      {
+        "id": "sc4",
+        "text": "戚继光从未打过败仗。",
+        "kind": "other",
+        "riskLevel": "high",
+        "category": "superlative",
+        "signals": ["从未", "绝对化评价", "缺少限定条件"],
+        "consequence": "绝对化战绩会掩盖战事背景与不同记载。",
+        "sentence": "他还被说成是从未打过败仗的将军。",
+        "span": { "start": 218, "end": 234 }
+      },
+      {
+        "id": "sc5",
+        "text": "戚继光曾在军营题写“先护百姓，再论功名”。",
+        "kind": "other",
+        "riskLevel": "medium",
+        "category": "quote",
+        "signals": ["引号内金句", "传闻", "缺少原始出处"],
+        "consequence": "无出处的引语容易被误当作人物原话。",
+        "sentence": "传闻他曾在军营题写“先护百姓，再论功名”。",
+        "span": { "start": 254, "end": 275 }
+      },
+      {
+        "id": "sc6",
+        "text": "戚家军取胜全靠祖传药方。",
+        "kind": "causal",
+        "riskLevel": "medium",
+        "category": "causal",
+        "signals": ["全靠", "祖传药方", "单一因果"],
+        "consequence": "单因果叙事会遮蔽训练、制度与战术等因素。",
+        "sentence": "更有人断言戚家军取胜全靠祖传药方。",
+        "span": { "start": 294, "end": 311 }
+      }
+    ],
+    "delayMs": 900
+  },
+  {
+    "type": "stage",
+    "stage": "search",
+    "status": "start",
+    "message": "正在模拟正反搜证，所有来源均为虚构演示。",
+    "delayMs": 11100
+  },
+  { "type": "claim_progress", "claimId": "sc3", "status": "queued", "delayMs": 500 },
+  { "type": "claim_progress", "claimId": "sc3", "status": "searching", "delayMs": 900 },
+  { "type": "claim_progress", "claimId": "sc3", "status": "grading", "delayMs": 700 },
+  { "type": "claim_progress", "claimId": "sc3", "status": "done", "delayMs": 800 },
+  { "type": "claim_progress", "claimId": "sc4", "status": "queued", "delayMs": 500 },
+  { "type": "claim_progress", "claimId": "sc4", "status": "searching", "delayMs": 900 },
+  { "type": "claim_progress", "claimId": "sc4", "status": "grading", "delayMs": 700 },
+  { "type": "claim_progress", "claimId": "sc4", "status": "done", "delayMs": 800 },
+  { "type": "claim_progress", "claimId": "sc5", "status": "queued", "delayMs": 500 },
+  { "type": "claim_progress", "claimId": "sc5", "status": "searching", "delayMs": 900 },
+  { "type": "claim_progress", "claimId": "sc5", "status": "grading", "delayMs": 700 },
+  { "type": "claim_progress", "claimId": "sc5", "status": "done", "delayMs": 800 },
+  {
+    "type": "stage",
+    "stage": "search",
+    "status": "done",
+    "message": "完成虚构演示搜证。",
+    "delayMs": 100
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src-sc3-a",
+      "claimId": "sc3",
+      "url": "https://example.com/demo/sc3-record",
+      "site": "虚构史料演示站",
+      "title": "台州战事兵力记载（演示）",
+      "snippet": "这是虚构演示条目，仅用于展示数字核对，不可作为史实依据。",
+      "direction": "con",
+      "query": "戚继光 台州 三千 十万 演示",
+      "stance": "refute",
+      "tier": "unknown",
+      "groupId": "grp-sc3",
+      "isOrigin": true,
+      "reachable": true
+    },
+    "delayMs": 900
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src-sc3-b",
+      "claimId": "sc3",
+      "url": "https://example.org/demo/sc3-retell",
+      "site": "虚构历史摘编站",
+      "title": "三千击退十万的说法（演示）",
+      "snippet": "这是虚构演示条目，仅用于展示同源传播放大，不可作为史实依据。",
+      "direction": "pro",
+      "query": "三千 击退 十万 演示",
+      "stance": "support",
+      "tier": "self",
+      "groupId": "grp-sc3",
+      "isOrigin": false,
+      "reachable": true
+    },
+    "delayMs": 600
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src-sc4-a",
+      "claimId": "sc4",
+      "url": "https://example.com/demo/sc4-record",
+      "site": "虚构史料演示站",
+      "title": "戚继光战事记录（演示）",
+      "snippet": "这是虚构演示条目，仅用于展示战绩限定，不可作为史实依据。",
+      "direction": "con",
+      "query": "戚继光 从未败战 演示",
+      "stance": "refute",
+      "tier": "unknown",
+      "groupId": "grp-sc4",
+      "isOrigin": true,
+      "reachable": true
+    },
+    "delayMs": 600
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src-sc4-b",
+      "claimId": "sc4",
+      "url": "https://example.org/demo/sc4-legend",
+      "site": "虚构故事摘编站",
+      "title": "常胜将军传说（演示）",
+      "snippet": "这是虚构演示条目，仅用于展示传说标签，不可作为史实依据。",
+      "direction": "pro",
+      "query": "戚继光 常胜将军 传说 演示",
+      "stance": "support",
+      "tier": "self",
+      "groupId": "grp-sc4",
+      "isOrigin": true,
+      "reachable": true
+    },
+    "delayMs": 600
+  },
+  {
+    "type": "source",
+    "source": {
+      "id": "src-sc5-a",
+      "claimId": "sc5",
+      "url": "https://example.com/demo/sc5-quote",
+      "site": "虚构语录考据站",
+      "title": "军营题词出处核查（演示）",
+      "snippet": "这是虚构演示条目，仅用于展示引语溯源，不可作为史实依据。",
+      "direction": "con",
+      "query": "先护百姓 再论功名 戚继光 演示",
+      "stance": "irrelevant",
+      "tier": "unknown",
+      "groupId": "grp-sc5",
+      "isOrigin": true,
+      "reachable": true
+    },
+    "delayMs": 600
+  },
+  {
+    "type": "groups",
+    "groups": [
+      {
+        "id": "grp-sc3",
+        "claimId": "sc3",
+        "originSourceId": "src-sc3-a",
+        "memberIds": ["src-sc3-a", "src-sc3-b"],
+        "reason": "演示中两条内容围绕同一虚构数字叙述，后一条为转述；不可作为史实依据。"
+      },
+      {
+        "id": "grp-sc4",
+        "claimId": "sc4",
+        "originSourceId": "src-sc4-a",
+        "memberIds": ["src-sc4-a", "src-sc4-b"],
+        "reason": "演示中记录与传说被并列呈现，需保留限定；不可作为史实依据。"
+      },
+      {
+        "id": "grp-sc5",
+        "claimId": "sc5",
+        "originSourceId": "src-sc5-a",
+        "memberIds": ["src-sc5-a"],
+        "reason": "仅有一条虚构演示核查条目，尚不足以确认引语。"
+      }
+    ],
+    "delayMs": 900
+  },
+  {
+    "type": "timeline",
+    "claimId": "sc3",
+    "steps": [
+      { "sourceId": "src-sc3-a", "quote": "演示记录未确认三千对十万的口径。" },
+      {
+        "sourceId": "src-sc3-b",
+        "quote": "演示摘编重复三千对十万的说法。",
+        "mutation": "将待核数字包装成确定战果。"
+      }
+    ],
+    "delayMs": 700
+  },
+  {
+    "type": "timeline",
+    "claimId": "sc4",
+    "steps": [
+      { "sourceId": "src-sc4-a", "quote": "演示记录提示战绩需要限定条件。" },
+      {
+        "sourceId": "src-sc4-b",
+        "quote": "演示文章称其为常胜将军。",
+        "mutation": "将传奇评价绝对化。"
+      }
+    ],
+    "delayMs": 700
+  },
+  {
+    "type": "timeline",
+    "claimId": "sc5",
+    "steps": [{ "sourceId": "src-sc5-a", "quote": "演示核查未找到可确认的原始题词。" }],
+    "delayMs": 500
+  },
+  {
+    "type": "verdict",
+    "verdict": {
+      "level": "unverified",
+      "confidence": 0.72,
+      "evidenceState": "multi",
+      "headline": "三处高传播表述需要降温",
+      "summary": "这是一份虚构演示卷宗。数字战果与常胜说法存在转述和限定缺失，题词目前没有足够出处。",
+      "claims": [
+        {
+          "claimId": "sc3",
+          "level": "partly_true",
+          "confidence": 0.68,
+          "summary": "演示材料只能说明该数字被传播，不能确认“三千对十万”的统计口径。",
+          "citationIds": ["src-sc3-a", "src-sc3-b"],
+          "scriptLabel": "recorded",
+          "rewrite": "可改为：关于台州战事的兵力与战果，需注明具体战役、来源和统计口径，不能直接写成三千击退十万。",
+          "searches": 2
+        },
+        {
+          "claimId": "sc4",
+          "level": "unverified",
+          "confidence": 0.61,
+          "summary": "我不知道戚继光是否从未打过败仗；演示材料不足以支持这一绝对说法，不能把没搜到充分证据当作编造。",
+          "citationIds": ["src-sc4-a", "src-sc4-b"],
+          "scriptLabel": "doubtful",
+          "rewrite": "可改为：他有多次著名战事，但“从未败过”属于需要具体战役依据的传说化表述。",
+          "searches": 2
+        },
+        {
+          "claimId": "sc5",
+          "level": "unverified",
+          "confidence": 0.58,
+          "summary": "现有演示核查没有确认题词原始出处，先标为待考，不把缺少出处直接判成伪造。",
+          "citationIds": ["src-sc5-a"],
+          "scriptLabel": "legend",
+          "rewrite": "可改为：民间传说中有类似题词，但暂未找到可核验的原始出处。",
+          "searches": 1
+        }
+      ],
+      "rebuttalCard": {
+        "title": "虚构演示：别让金句替证据作答",
+        "body": "本卷宗中的来源、数字和引语均为界面测试数据，不可作为史实依据；阅读历史带货稿时请区分记载、传说与待考。"
+      }
+    },
+    "delayMs": 1200
+  },
+  {
+    "type": "stats",
+    "stats": {
+      "apiCalls": 5,
+      "sourcesVisited": 5,
+      "independentWitnesses": 3,
+      "durationMs": 12600,
+      "claimsChecked": 3
+    },
+    "delayMs": 500
+  },
+  {
+    "type": "billing",
+    "billing": {
+      "pricePerClaim": 8,
+      "checkedClaimIds": ["sc3", "sc4", "sc5"],
+      "charged": 24,
+      "refundClaimIds": ["sc5"],
+      "refunded": 4,
+      "reason": "引语核查仅得到一条不足以确认出处的演示结果，按部分退款处理。"
+    },
+    "delayMs": 700
+  },
+  {
+    "type": "done",
+    "caseFile": {
+      "id": "case-script-001",
+      "mode": "scriptcheck",
+      "previewId": "preview-script-001",
+      "input": "以下是虚构历史带货口播演示，所有情节及资料仅用于界面测试，不可作为史实依据。今天翻开这本《海防人物故事》，先看一位将军的处境：海风吹过城墙，军营里有人擦拭长枪，也有人等待家书。戚继光是明代抗倭将领。可镜头转到民间，故事就变得热闹起来。据说戚继光少年时靠卖柴供弟弟读书。一根扁担、一条山路，把寒门少年的形象立住了，可这样的细节到底来自哪里？这本书宣称他在台州仅用三千人击退十万敌军。数字一出来，观众很容易热血上头，却未必有空追问统计口径。他还被说成是从未打过败仗的将军。越是肯定的话，越应该停下来看看限定条件。传闻他曾在军营题写“先护百姓，再论功名”。这句话适合做封面，但漂亮不等于有出处。更有人断言戚家军取胜全靠祖传药方。听到这里，先别急着下单。我们可以喜欢历史人物，也可以欣赏故事写法，但要把记载、传说与待考之处分开。这本书适合怎样阅读，应该由可靠材料和清楚标注来说明，而不是让情绪替证据作答。",
+      "createdAt": "2026-10-24T09:00:00.000Z",
+      "claims": [
+        {
+          "id": "sc1",
+          "text": "戚继光是明代抗倭将领。",
+          "kind": "person",
+          "riskLevel": "low",
+          "category": "person",
+          "signals": ["人物身份明确", "朝代与职务可核查"],
+          "consequence": "身份若错会误导整段人物叙事。",
+          "sentence": "戚继光是明代抗倭将领。",
+          "span": { "start": 88, "end": 99 }
+        },
+        {
+          "id": "sc2",
+          "text": "据说戚继光少年时靠卖柴供弟弟读书。",
+          "kind": "person",
+          "riskLevel": "low",
+          "category": "person",
+          "signals": ["据说", "贫寒经历细节"],
+          "consequence": "未经出处的苦难细节可能被包装成真实经历。",
+          "sentence": "据说戚继光少年时靠卖柴供弟弟读书。",
+          "span": { "start": 117, "end": 134 }
+        },
+        {
+          "id": "sc3",
+          "text": "戚继光在台州仅用三千人击退十万敌军。",
+          "kind": "number",
+          "riskLevel": "high",
+          "category": "number",
+          "signals": ["三千对十万", "仅用", "战果数字悬殊"],
+          "consequence": "夸大的兵力数字会制造传奇化战绩。",
+          "sentence": "这本书宣称他在台州仅用三千人击退十万敌军。",
+          "span": { "start": 169, "end": 190 }
+        },
+        {
+          "id": "sc4",
+          "text": "戚继光从未打过败仗。",
+          "kind": "other",
+          "riskLevel": "high",
+          "category": "superlative",
+          "signals": ["从未", "绝对化评价", "缺少限定条件"],
+          "consequence": "绝对化战绩会掩盖战事背景与不同记载。",
+          "sentence": "他还被说成是从未打过败仗的将军。",
+          "span": { "start": 218, "end": 234 }
+        },
+        {
+          "id": "sc5",
+          "text": "戚继光曾在军营题写“先护百姓，再论功名”。",
+          "kind": "other",
+          "riskLevel": "medium",
+          "category": "quote",
+          "signals": ["引号内金句", "传闻", "缺少原始出处"],
+          "consequence": "无出处的引语容易被误当作人物原话。",
+          "sentence": "传闻他曾在军营题写“先护百姓，再论功名”。",
+          "span": { "start": 254, "end": 275 }
+        },
+        {
+          "id": "sc6",
+          "text": "戚家军取胜全靠祖传药方。",
+          "kind": "causal",
+          "riskLevel": "medium",
+          "category": "causal",
+          "signals": ["全靠", "祖传药方", "单一因果"],
+          "consequence": "单因果叙事会遮蔽训练、制度与战术等因素。",
+          "sentence": "更有人断言戚家军取胜全靠祖传药方。",
+          "span": { "start": 294, "end": 311 }
+        }
+      ],
+      "selectedClaimIds": ["sc3", "sc4", "sc5"],
+      "sources": [
+        {
+          "id": "src-sc3-a",
+          "claimId": "sc3",
+          "url": "https://example.com/demo/sc3-record",
+          "site": "虚构史料演示站",
+          "title": "台州战事兵力记载（演示）",
+          "snippet": "这是虚构演示条目，仅用于展示数字核对，不可作为史实依据。",
+          "direction": "con",
+          "query": "戚继光 台州 三千 十万 演示",
+          "stance": "refute",
+          "tier": "unknown",
+          "groupId": "grp-sc3",
+          "isOrigin": true,
+          "reachable": true
+        },
+        {
+          "id": "src-sc3-b",
+          "claimId": "sc3",
+          "url": "https://example.org/demo/sc3-retell",
+          "site": "虚构历史摘编站",
+          "title": "三千击退十万的说法（演示）",
+          "snippet": "这是虚构演示条目，仅用于展示同源传播放大，不可作为史实依据。",
+          "direction": "pro",
+          "query": "三千 击退 十万 演示",
+          "stance": "support",
+          "tier": "self",
+          "groupId": "grp-sc3",
+          "isOrigin": false,
+          "reachable": true
+        },
+        {
+          "id": "src-sc4-a",
+          "claimId": "sc4",
+          "url": "https://example.com/demo/sc4-record",
+          "site": "虚构史料演示站",
+          "title": "戚继光战事记录（演示）",
+          "snippet": "这是虚构演示条目，仅用于展示战绩限定，不可作为史实依据。",
+          "direction": "con",
+          "query": "戚继光 从未败战 演示",
+          "stance": "refute",
+          "tier": "unknown",
+          "groupId": "grp-sc4",
+          "isOrigin": true,
+          "reachable": true
+        },
+        {
+          "id": "src-sc4-b",
+          "claimId": "sc4",
+          "url": "https://example.org/demo/sc4-legend",
+          "site": "虚构故事摘编站",
+          "title": "常胜将军传说（演示）",
+          "snippet": "这是虚构演示条目，仅用于展示传说标签，不可作为史实依据。",
+          "direction": "pro",
+          "query": "戚继光 常胜将军 传说 演示",
+          "stance": "support",
+          "tier": "self",
+          "groupId": "grp-sc4",
+          "isOrigin": true,
+          "reachable": true
+        },
+        {
+          "id": "src-sc5-a",
+          "claimId": "sc5",
+          "url": "https://example.com/demo/sc5-quote",
+          "site": "虚构语录考据站",
+          "title": "军营题词出处核查（演示）",
+          "snippet": "这是虚构演示条目，仅用于展示引语溯源，不可作为史实依据。",
+          "direction": "con",
+          "query": "先护百姓 再论功名 戚继光 演示",
+          "stance": "irrelevant",
+          "tier": "unknown",
+          "groupId": "grp-sc5",
+          "isOrigin": true,
+          "reachable": true
+        }
+      ],
+      "groups": [
+        {
+          "id": "grp-sc3",
+          "claimId": "sc3",
+          "originSourceId": "src-sc3-a",
+          "memberIds": ["src-sc3-a", "src-sc3-b"],
+          "reason": "演示中两条内容围绕同一虚构数字叙述，后一条为转述；不可作为史实依据。"
+        },
+        {
+          "id": "grp-sc4",
+          "claimId": "sc4",
+          "originSourceId": "src-sc4-a",
+          "memberIds": ["src-sc4-a", "src-sc4-b"],
+          "reason": "演示中记录与传说被并列呈现，需保留限定；不可作为史实依据。"
+        },
+        {
+          "id": "grp-sc5",
+          "claimId": "sc5",
+          "originSourceId": "src-sc5-a",
+          "memberIds": ["src-sc5-a"],
+          "reason": "仅有一条虚构演示核查条目，尚不足以确认引语。"
+        }
+      ],
+      "timelines": {
+        "sc3": [
+          { "sourceId": "src-sc3-a", "quote": "演示记录未确认三千对十万的口径。" },
+          {
+            "sourceId": "src-sc3-b",
+            "quote": "演示摘编重复三千对十万的说法。",
+            "mutation": "将待核数字包装成确定战果。"
+          }
+        ],
+        "sc4": [
+          { "sourceId": "src-sc4-a", "quote": "演示记录提示战绩需要限定条件。" },
+          {
+            "sourceId": "src-sc4-b",
+            "quote": "演示文章称其为常胜将军。",
+            "mutation": "将传奇评价绝对化。"
+          }
+        ],
+        "sc5": [{ "sourceId": "src-sc5-a", "quote": "演示核查未找到可确认的原始题词。" }]
+      },
+      "verdict": {
+        "level": "unverified",
+        "confidence": 0.72,
+        "evidenceState": "multi",
+        "headline": "三处高传播表述需要降温",
+        "summary": "这是一份虚构演示卷宗。数字战果与常胜说法存在转述和限定缺失，题词目前没有足够出处。",
+        "claims": [
+          {
+            "claimId": "sc3",
+            "level": "partly_true",
+            "confidence": 0.68,
+            "summary": "演示材料只能说明该数字被传播，不能确认“三千对十万”的统计口径。",
+            "citationIds": ["src-sc3-a", "src-sc3-b"],
+            "scriptLabel": "recorded",
+            "rewrite": "可改为：关于台州战事的兵力与战果，需注明具体战役、来源和统计口径，不能直接写成三千击退十万。",
+            "searches": 2
+          },
+          {
+            "claimId": "sc4",
+            "level": "unverified",
+            "confidence": 0.61,
+            "summary": "我不知道戚继光是否从未打过败仗；演示材料不足以支持这一绝对说法，不能把没搜到充分证据当作编造。",
+            "citationIds": ["src-sc4-a", "src-sc4-b"],
+            "scriptLabel": "doubtful",
+            "rewrite": "可改为：他有多次著名战事，但“从未败过”属于需要具体战役依据的传说化表述。",
+            "searches": 2
+          },
+          {
+            "claimId": "sc5",
+            "level": "unverified",
+            "confidence": 0.58,
+            "summary": "现有演示核查没有确认题词原始出处，先标为待考，不把缺少出处直接判成伪造。",
+            "citationIds": ["src-sc5-a"],
+            "scriptLabel": "legend",
+            "rewrite": "可改为：民间传说中有类似题词，但暂未找到可核验的原始出处。",
+            "searches": 1
+          }
+        ],
+        "rebuttalCard": {
+          "title": "虚构演示：别让金句替证据作答",
+          "body": "本卷宗中的来源、数字和引语均为界面测试数据，不可作为史实依据；阅读历史带货稿时请区分记载、传说与待考。"
+        }
+      },
+      "stats": {
+        "apiCalls": 5,
+        "sourcesVisited": 5,
+        "independentWitnesses": 3,
+        "durationMs": 12600,
+        "claimsChecked": 3
+      },
+      "billing": {
+        "pricePerClaim": 8,
+        "checkedClaimIds": ["sc3", "sc4", "sc5"],
+        "charged": 24,
+        "refundClaimIds": ["sc5"],
+        "refunded": 4,
+        "reason": "引语核查仅得到一条不足以确认出处的演示结果，按部分退款处理。"
+      }
+    },
+    "delayMs": 800
+  }
+]
