@@ -1,26 +1,98 @@
 @import 'tailwindcss';
 
+@theme {
+  /* 纸面与线条 */
+  --color-paper: #e9f6ee;
+  --color-paper-deep: #d9efdf;
+  --color-card: #fffdf8;
+  --color-beige: #fbf1dd;
+  --color-ink: #1c1c1c;
+
+  /* 品牌色 */
+  --color-brand: #28a95b;
+  --color-brand-deep: #1f8b4c;
+  --color-brand-soft: #dcf3e3;
+  --color-coral: #e4573d;
+  --color-coral-soft: #fde7e1;
+  --color-tangerine: #e07a1f;
+  --color-tangerine-soft: #fdeed8;
+  --color-sky: #3b7bd9;
+  --color-sky-soft: #e3eeff;
+  --color-muted: #7b7b72;
+
+  /* 描边与手绘阴影 */
+  --shadow-ink: 4px 4px 0 var(--color-ink);
+  --shadow-ink-sm: 3px 3px 0 var(--color-ink);
+  --shadow-ink-lg: 6px 6px 0 var(--color-ink);
+
+  --radius-ink: 1.25rem;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family:
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+}
+
+/* 点阵纸面 + 顶部放射光，来自原型背景 */
+.paper-bg {
+  background-image:
+    repeating-conic-gradient(
+      from 180deg at 50% -6%,
+      rgb(255 255 255 / 0.55) 0deg 2.6deg,
+      rgb(255 255 255 / 0) 2.6deg 11deg
+    ),
+    radial-gradient(var(--color-paper-deep) 1.2px, transparent 1.2px);
+  background-size:
+    100% 100%,
+    14px 14px;
+  background-position:
+    center top,
+    center top;
+}
+
+/* 标题：白字 + 黑描边 + 绿色错位投影 */
+.ink-title {
+  color: #fff;
+  -webkit-text-stroke: 7px var(--color-ink);
+  paint-order: stroke fill;
+  text-shadow:
+    3px 3px 0 var(--color-brand),
+    6px 6px 0 rgb(28 28 28 / 0.18);
+}
+
+@media (max-width: 640px) {
+  .ink-title {
+    -webkit-text-stroke-width: 5px;
+    text-shadow: 2px 2px 0 var(--color-brand);
+  }
+}
+
+/* 加载/等待用的斜纹 */
+.hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-paper-deep) 0 12px,
+    transparent 12px 24px
+  );
+}
+
+@keyframes listening-wave {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.wave-bar {
+  animation: listening-wave 0.9s ease-in-out infinite;
+  transform-origin: center;
 }
