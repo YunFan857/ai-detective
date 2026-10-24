@@ -1,4 +1,3 @@
-import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { LeafMark } from '@/components/ui/icons';
 
 export function HomeHero() {
@@ -8,14 +7,9 @@ export function HomeHero() {
         AI 侦探社!
       </h1>
 
-      <div className="relative mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 sm:mt-3">
-        <DetectiveMascot className="pointer-events-none absolute -top-5 left-0 z-10 w-[78px] -rotate-3 sm:-top-4 sm:left-1 sm:w-[100px]" />
-
-        <span className="ml-[72px] -rotate-2 rounded-xl border-2 border-ink bg-card px-3.5 py-1.5 text-sm font-bold shadow-ink-sm sm:ml-[104px]">
-          这条消息靠谱吗？！
-        </span>
+      <div className="mt-5 flex justify-center sm:mt-3">
         <span className="rotate-1 rounded-xl border-2 border-ink bg-brand px-4 py-1.5 text-base font-black text-white shadow-ink-sm [text-shadow:1.5px_1.5px_0_var(--color-ink)]">
-          把结论的来路查清楚！
+          把结论的来路查清楚
         </span>
       </div>
 

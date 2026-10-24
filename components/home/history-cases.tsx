@@ -1,18 +1,38 @@
 import Link from 'next/link';
 import { FolderIcon } from '@/components/ui/icons';
+import { VERDICT_META, verdictLabel } from '@/lib/labels';
+import type { VerdictLevel } from '@/types/case';
 
-type VerdictTone = 'out_of_context' | 'false' | 'true';
-
-const TONE: Record<VerdictTone, { label: string; className: string }> = {
-  out_of_context: { label: '断章取义', className: 'bg-tangerine' },
-  false: { label: '谣言！', className: 'bg-coral' },
-  true: { label: '真实 ✓', className: 'bg-brand' },
+type DemoCase = {
+  id: string;
+  title: string;
+  input: string;
+  verdict: VerdictLevel;
 };
 
-const DEMO_CASES: { title: string; quote: string; tone: VerdictTone }[] = [
-  { title: '咖啡致癌？', quote: '“世卫专家证实喝咖啡会致癌”', tone: 'out_of_context' },
-  { title: '自来水管含毒', quote: '“紧急通知！今晚的水别喝…”', tone: 'false' },
-  { title: '秦陵水银', quote: '“秦始皇陵里有大量水银”', tone: 'true' },
+/**
+ * 演示卷宗先硬编码；后端提交 cache/index.json（[{ id, title, input }]）后改为读取。
+ * 结论印章需另配，后端就绪前先用本地硬编码的 verdict。
+ */
+const DEMO_CASES: DemoCase[] = [
+  {
+    id: 'demo-1',
+    title: '咖啡致癌？',
+    input: '“世卫专家证实喝咖啡会致癌”',
+    verdict: 'out_of_context',
+  },
+  {
+    id: 'demo-2',
+    title: '自来水管含毒',
+    input: '“紧急通知！今晚的水别喝…”',
+    verdict: 'false',
+  },
+  {
+    id: 'demo-3',
+    title: '秦陵水银',
+    input: '“秦始皇陵里有大量水银”',
+    verdict: 'true',
+  },
 ];
 
 export function HistoryCases() {
@@ -26,25 +46,22 @@ export function HistoryCases() {
       </h2>
 
       <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {DEMO_CASES.map((item) => {
-          const tone = TONE[item.tone];
-          return (
-            <li key={item.title} className="relative">
-              <Link
-                href="/case"
-                className="relative block rounded-xl border-2 border-ink bg-beige px-4 pt-4 pb-3 shadow-ink-sm transition-transform hover:-translate-y-0.5 hover:shadow-ink"
+        {DEMO_CASES.map((item) => (
+          <li key={item.id} className="relative">
+            <Link
+              href={`/case?mode=demo&demoId=${encodeURIComponent(item.id)}`}
+              className="relative block rounded-xl border-2 border-ink bg-beige px-4 pt-4 pb-3 shadow-ink-sm transition-transform hover:-translate-y-0.5 hover:shadow-ink"
+            >
+              <span
+                className={`absolute -top-2.5 right-3 rotate-3 rounded border-2 border-ink px-2 py-0.5 text-[10px] font-black text-white shadow-ink-sm ${VERDICT_META[item.verdict].solid}`}
               >
-                <span
-                  className={`absolute -top-2.5 right-3 rotate-3 rounded border-2 border-ink px-2 py-0.5 text-[10px] font-black text-white ${tone.className}`}
-                >
-                  {tone.label}
-                </span>
-                <p className="text-sm font-black">{item.title}</p>
-                <p className="mt-1 truncate text-[11px] text-muted">{item.quote}</p>
-              </Link>
-            </li>
-          );
-        })}
+                {verdictLabel(item.verdict)}
+              </span>
+              <p className="text-sm font-black">{item.title}</p>
+              <p className="mt-1 truncate text-[11px] text-muted">{item.input}</p>
+            </Link>
+          </li>
+        ))}
       </ul>
     </section>
   );

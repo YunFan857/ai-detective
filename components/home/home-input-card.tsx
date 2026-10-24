@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ComponentType, type SVGProps } from 'react';
 import { useRouter } from 'next/navigation';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
+import { SpeechBubble } from '@/components/ui/speech-bubble';
 import {
   CameraIcon,
   LinkIcon,
@@ -24,6 +25,7 @@ const MODES: { id: Mode; label: string; Icon: Icon; badge?: string }[] = [
 ];
 
 const TEXT_LIMIT = 500;
+const TEXT_MIN = 4;
 
 function formatSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
@@ -32,9 +34,7 @@ function formatSize(bytes: number) {
 export function HomeInputCard() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('text');
-  const [text, setText] = useState(
-    '喝咖啡会致癌，世卫组织专家已证实！赶紧告诉家人，早上空腹喝的更危险',
-  );
+  const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [locked, setLocked] = useState(false);
   const [listening, setListening] = useState(false);
@@ -79,20 +79,40 @@ export function HomeInputCard() {
     }
   })();
 
+  const trimmedText = text.trim();
   const canSubmit =
-    (mode === 'text' && text.trim().length > 0) ||
+    (mode === 'text' && trimmedText.length >= TEXT_MIN && trimmedText.length <= TEXT_LIMIT) ||
     (mode === 'link' && host.length > 0) ||
     (mode === 'image' && file !== null);
 
   function handleSubmit() {
     if (!canSubmit) return;
-    // TODO(PRD 步骤 2)：立案后先进入疑点清单，接口就绪后改为携带案件参数。
-    router.push('/case');
+    const isMock =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('mode') === 'mock';
+
+    if (mode === 'text') {
+      const target = `/case?mode=${isMock ? 'mock' : 'real'}&text=${encodeURIComponent(trimmedText)}`;
+      router.push(target);
+      return;
+    }
+
+    router.push(isMock ? '/case?mode=mock' : '/case');
   }
 
   return (
-    <section className="relative mx-auto mt-6 w-full max-w-[860px] px-4 sm:mt-4">
+    <section className="relative mx-auto mt-20 w-full max-w-[860px] px-4 sm:mt-16">
       <div className="relative rounded-[26px] border-[3px] border-ink bg-card p-4 shadow-ink-lg sm:p-5">
+        <div className="pointer-events-none absolute -top-[58px] -left-1 z-20 flex items-end sm:-top-[66px] sm:-left-4">
+          <DetectiveMascot className="w-[56px] -rotate-3 sm:w-[68px]" />
+          <SpeechBubble
+            tail="bottom"
+            className="mb-3 -rotate-2 px-3 py-1.5 text-xs whitespace-nowrap sm:text-sm"
+          >
+            这条消息靠谱吗？！
+          </SpeechBubble>
+        </div>
+
         <span className="absolute -top-3 right-7 rotate-6 rounded-md border-2 border-ink bg-coral px-2.5 py-0.5 text-xs font-black text-white shadow-ink-sm">
           报案单
         </span>
@@ -113,7 +133,7 @@ export function HomeInputCard() {
                 onClick={() => setMode(item.id)}
                 className={`relative flex items-center gap-1.5 rounded-lg border-2 border-ink px-3 py-1.5 text-sm font-bold transition-transform ${
                   active
-                    ? 'bg-brand text-white shadow-ink-sm [text-shadow:1px_1px_0_var(--color-ink)]'
+                    ? '-translate-y-1 bg-brand text-white shadow-ink-sm [text-shadow:1px_1px_0_var(--color-ink)]'
                     : 'bg-card text-ink hover:-translate-y-0.5'
                 }`}
               >
@@ -138,11 +158,16 @@ export function HomeInputCard() {
                 maxLength={TEXT_LIMIT}
                 rows={3}
                 aria-label="要查证的消息"
-                placeholder="喝咖啡会致癌，世卫组织专家已证实！赶紧告诉家人，早上空腹喝的更危险"
+                placeholder="把朋友圈、家族群里那条可疑消息贴进来……"
                 className="block w-full resize-none bg-transparent pb-8 text-[15px] leading-8 outline-none placeholder:text-muted/80"
               />
-              <span className="absolute bottom-3 left-4 text-xs text-muted">
+              <span
+                className={`absolute bottom-3 left-4 text-xs ${
+                  trimmedText.length > 0 && trimmedText.length < TEXT_MIN ? 'text-coral' : 'text-muted'
+                }`}
+              >
                 {text.length} / {TEXT_LIMIT}
+                {trimmedText.length > 0 && trimmedText.length < TEXT_MIN ? ' · 至少 4 个字' : ''}
               </span>
 
               <div className="absolute right-4 bottom-3 flex items-end gap-2">
@@ -320,8 +345,8 @@ export function HomeInputCard() {
             onClick={handleSubmit}
             className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand px-6 py-2.5 text-base font-black text-white shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:border-gray disabled:bg-gray-soft disabled:text-gray disabled:shadow-none"
           >
-            <DetectiveMascot className="h-5 w-4" />
-            立案调查！
+            <span aria-hidden>🕵️</span>
+            立案调查
           </button>
         </div>
       </div>

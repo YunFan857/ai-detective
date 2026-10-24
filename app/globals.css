@@ -142,6 +142,23 @@ body {
     center top;
 }
 
+/* 拆分图层，供首页分别做轻微缓动 */
+.paper-rays {
+  background-image: repeating-conic-gradient(
+    from 180deg at 50% -6%,
+    rgb(255 255 255 / 0.55) 0deg 2.6deg,
+    rgb(255 255 255 / 0) 2.6deg 11deg
+  );
+  background-size: 100% 100%;
+  background-position: center top;
+}
+
+.paper-dots {
+  background-image: radial-gradient(var(--color-paper-deep) 1.2px, transparent 1.2px);
+  background-size: 14px 14px;
+  background-position: center top;
+}
+
 /* 标题：白字 + 黑描边 + 绿色错位投影 */
 .ink-title {
   color: var(--color-white);
