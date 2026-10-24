@@ -22,7 +22,16 @@ import {
   type XYPosition,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { DetectiveMascot } from '@/components/ui/detective-mascot';
+import { ErrorBoundary } from '@/components/ui/error-boundary';
 import type { Claim, Source, SourceGroup, Stance, TimelineStep } from '@/types/case';
+import {
+  clipText,
+  formatSourceTime,
+  sourceSiteLabel,
+  sourceSnippetLabel,
+  sourceTitleLabel,
+} from '@/lib/labels';
 import { STEPS, stepById, stepOfTier, type StepId } from '@/lib/steps';
 
 export type EvidenceGraphProps = {
@@ -42,6 +51,8 @@ export type EvidenceGraphProps = {
   focusSourceId?: string | null;
   /** 同一来源被重复点击时递增，用来重新居中。 */
   focusNonce?: number;
+  /** 已结案但一条疑点都没有：画布展示空状态而不是等待态。 */
+  empty?: boolean;
 };
 
 type ClaimNodeData = {
@@ -77,7 +88,17 @@ type GroupNodeData = {
   memberSites: string;
 };
 
-type GraphNodeData = ClaimNodeData | SourceNodeData | GroupNodeData;
+type MoreNodeData = {
+  kind: 'more';
+  step: StepId;
+  isCurrent: boolean;
+  isNew: boolean;
+  isFocused: boolean;
+  moreId: string;
+  count: number;
+};
+
+type GraphNodeData = ClaimNodeData | SourceNodeData | GroupNodeData | MoreNodeData;
 type GraphNode = Node<GraphNodeData, 'evidence'>;
 
 type GraphEdgeData = {
@@ -88,8 +109,7 @@ type GraphEdgeData = {
 };
 type GraphEdge = Edge<GraphEdgeData, 'evidence'>;
 
-type Entity =
-  | { kind: 'claim'; id: string; step: 1 }
+type CardEntity =
   | { kind: 'source'; id: string; step: StepId; source: Source }
   | {
       kind: 'group';
@@ -100,23 +120,39 @@ type Entity =
       memberSites: string;
     };
 
-type Selection = { kind: 'source'; id: string } | { kind: 'group'; id: string };
+type Entity =
+  | { kind: 'claim'; id: string; step: 1 }
+  | CardEntity
+  | {
+      kind: 'more';
+      id: string;
+      step: StepId;
+      sourceIds: string[];
+    };
+
+type Selection =
+  | { kind: 'source'; id: string }
+  | { kind: 'group'; id: string }
+  | { kind: 'more'; id: string };
 
 const CARD_WIDTH = 190;
 const CARD_HEIGHT = 84;
 const COL_GAP = 24;
-const ROW_GAP = 28;
+const ROW_GAP = 20;
+/** 单步最多渲染 8 张卡片（4 行），超出部分折叠成「其余来源」卡片。 */
+const MAX_STEP_CARDS = 8;
 
 /** 每个步骤的固定区域：断言在左中，官方右上，媒体中下，自媒体右中。 */
 const REGIONS: Record<StepId, { x: number; y: number; columns: number }> = {
   1: { x: 16, y: 276, columns: 1 },
   2: { x: 350, y: 16, columns: 2 },
-  3: { x: 270, y: 430, columns: 2 },
+  /** 第二步最多 4 行（到 y=412），第三步从 432 起排，避免与第二步重叠。 */
+  3: { x: 270, y: 432, columns: 2 },
   4: { x: 780, y: 180, columns: 2 },
 };
 
 /** 首次相机范围：预先框住所有步骤区域，避免后续节点出现时再 fitView 造成跳动。 */
-const LAYOUT_BOUNDS = { x: -16, y: -16, width: 1216, height: 800 };
+const LAYOUT_BOUNDS = { x: -16, y: -16, width: 1216, height: 850 };
 
 const LEGEND = [
   { step: 1, hint: '待核验的断言' },
@@ -145,22 +181,16 @@ function sourceStep(source: Source): StepId {
   return stepOfTier(source.tier ?? 'unknown');
 }
 
-function formatMonth(iso: string | undefined): string {
-  return iso ? iso.slice(0, 7) : '日期待核验';
-}
-
-function formatDay(iso: string | undefined): string {
-  return iso ? iso.slice(0, 10) : '日期待核验';
-}
-
+/** 卡片摘要只保留前 200 字：真实数据的 passage 可达 800 字，无需整段进节点。 */
 function quoteOf(source: Source): string {
-  return source.snippet || source.title || '暂无摘要';
+  return clipText(sourceSnippetLabel(source), 200);
 }
 
 function earliestSource(sources: Source[]): Source | null {
-  const dated = sources.filter(
-    (source): source is Source & { publishedAt: string } => Boolean(source.publishedAt),
-  );
+  const dated = sources.filter((source): source is Source & { publishedAt: string } => {
+    if (!source.publishedAt) return false;
+    return !Number.isNaN(Date.parse(source.publishedAt));
+  });
   if (dated.length === 0) return null;
 
   return dated.reduce((earliest, current) =>
@@ -177,13 +207,13 @@ function claimMetaOf(sources: Source[]): string {
   );
   const origin = earliestSource(spreaders) ?? earliestSource(proSources) ?? earliestSource(sources);
 
-  if (!origin) return '发布者待核验 · 日期待核验';
-  return `${origin.site} · ${formatMonth(origin.publishedAt)} 发布`;
+  if (!origin) return '发布者待核验 · 时间不详';
+  return `${sourceSiteLabel(origin)} · ${formatSourceTime(origin.publishedAt, 'month')} 发布`;
 }
 
 function buildEntities(claim: Claim, sources: Source[], groups: SourceGroup[]): Entity[] {
   const sourceById = new Map(sources.map((source) => [source.id, source]));
-  const groupCards: Entity[] = [];
+  const groupCards: CardEntity[] = [];
 
   for (const group of groups) {
     const origin = sourceById.get(group.originSourceId);
@@ -193,8 +223,9 @@ function buildEntities(claim: Claim, sources: Source[], groups: SourceGroup[]): 
     if (memberIds.length === 0) continue;
 
     const memberSites = memberIds
-      .map((id) => sourceById.get(id)?.site)
-      .filter((site): site is string => Boolean(site));
+      .map((id) => sourceById.get(id))
+      .filter((source): source is Source => source !== undefined)
+      .map(sourceSiteLabel);
     const summary =
       memberSites.slice(0, 2).join(' / ') + (memberSites.length > 2 ? ' / …' : '');
 
@@ -216,7 +247,7 @@ function buildEntities(claim: Claim, sources: Source[], groups: SourceGroup[]): 
     }
   }
 
-  const sourceCards: Entity[] = sources
+  const sourceCards: CardEntity[] = sources
     .filter((source) => !foldedIds.has(source.id))
     .map((source) => ({
       kind: 'source',
@@ -225,7 +256,45 @@ function buildEntities(claim: Claim, sources: Source[], groups: SourceGroup[]): 
       source,
     }));
 
-  return [{ kind: 'claim', id: `claim-${claim.id}`, step: 1 }, ...sourceCards, ...groupCards];
+  /** 每个步骤内部按「来源 → 同源组」排序，超过上限时保留前 7 张并折叠其余。 */
+  const cardsByStep = new Map<StepId, CardEntity[]>([
+    [2, []],
+    [3, []],
+    [4, []],
+  ]);
+  for (const entity of sourceCards) cardsByStep.get(entity.step)?.push(entity);
+  for (const entity of groupCards) cardsByStep.get(entity.step)?.push(entity);
+
+  const entities: Entity[] = [{ kind: 'claim', id: `claim-${claim.id}`, step: 1 }];
+  for (const step of [2, 3, 4] as const) {
+    const cards = cardsByStep.get(step) ?? [];
+    if (cards.length <= MAX_STEP_CARDS) {
+      entities.push(...cards);
+      continue;
+    }
+
+    const visible = cards.slice(0, MAX_STEP_CARDS - 1);
+    const hidden = cards.slice(MAX_STEP_CARDS - 1);
+    const hiddenSourceIds = new Set<string>();
+    for (const entity of hidden) {
+      if (entity.kind === 'source') {
+        hiddenSourceIds.add(entity.source.id);
+        continue;
+      }
+      for (const id of entity.group.memberIds) {
+        if (id !== entity.group.originSourceId) hiddenSourceIds.add(id);
+      }
+    }
+
+    entities.push(...visible, {
+      kind: 'more',
+      id: `more-${claim.id}-${step}`,
+      step,
+      sourceIds: [...hiddenSourceIds],
+    });
+  }
+
+  return entities;
 }
 
 function buildEdges(
@@ -304,6 +373,16 @@ function buildEdges(
         dashed: true,
       });
     }
+
+    if (entity.kind === 'more' && entity.step <= revealedStep) {
+      candidates.push({
+        id: `edge-more-${entity.id}`,
+        source: claimId,
+        target: entity.id,
+        step: entity.step,
+        dashed: true,
+      });
+    }
   }
 
   const visibleIds = new Set(
@@ -351,9 +430,16 @@ function computePositions(sources: Source[], entities: Entity[]): Map<string, XY
     };
   };
 
+  /** 只有真正渲染成卡片的来源才占槽位；被折叠进同源组的转载不再留出空位。 */
+  const renderedSourceIds = new Set(
+    entities.flatMap((entity) => (entity.kind === 'source' ? [entity.source.id] : [])),
+  );
+
   const slotBySourceId = new Map<string, number>();
   const sourceSlots: Record<StepId, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
   for (const source of sources) {
+    if (!renderedSourceIds.has(source.id)) continue;
+
     const step = sourceStep(source);
     slotBySourceId.set(source.id, sourceSlots[step]);
     sourceSlots[step] += 1;
@@ -365,6 +451,9 @@ function computePositions(sources: Source[], entities: Entity[]): Map<string, XY
     if (entity.kind === 'source') {
       positions.set(entity.id, slotOf(entity.step, slotBySourceId.get(entity.source.id) ?? 0));
     } else if (entity.kind === 'group') {
+      positions.set(entity.id, slotOf(entity.step, groupSlots[entity.step]));
+      groupSlots[entity.step] += 1;
+    } else if (entity.kind === 'more') {
       positions.set(entity.id, slotOf(entity.step, groupSlots[entity.step]));
       groupSlots[entity.step] += 1;
     } else {
@@ -431,7 +520,10 @@ function ClaimCard({ data }: { data: ClaimNodeData }) {
         <span className="absolute -top-2.5 -right-1.5 rotate-3 rounded-md border-2 border-ink bg-card px-2 py-0.5 text-[10px] font-black text-ink shadow-ink-sm">
           断言
         </span>
-        <p className="line-clamp-3 pr-8 text-[15px] leading-snug font-black text-ink">
+        <p
+          className="line-clamp-3 pr-8 text-[15px] leading-snug font-black text-ink"
+          title={data.text}
+        >
           {data.text}
         </p>
         <p className="mt-2 text-[11px] font-bold text-muted">{data.meta}</p>
@@ -482,7 +574,10 @@ function SourceCard({ data }: { data: SourceNodeData }) {
         >
           {data.site} · {data.date}
         </p>
-        <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-ink" title={data.quote}>
+        <p
+          className="mt-1 line-clamp-2 text-[11px] leading-snug text-ink"
+          title={data.quote}
+        >
           {data.quote}
         </p>
         <div className="mt-1.5">
@@ -542,7 +637,56 @@ function GroupCard({ data }: { data: GroupNodeData }) {
   );
 }
 
-function EvidenceNode({ data }: NodeProps<GraphNode>) {
+function MoreCard({ data }: { data: MoreNodeData }) {
+  const step = stepById(data.step);
+
+  return (
+    <PopIn isNew={data.isNew}>
+      <div className="relative w-[190px]">
+        <div
+          aria-hidden
+          className="absolute inset-0 translate-x-2 translate-y-2 rounded-xl border-2 border-dashed border-ink/60 bg-card"
+        />
+        <div
+          className={clsx(
+            'relative rounded-xl border-dashed border-ink px-3 py-2.5',
+            data.isFocused && 'outline outline-[6px] outline-offset-2 outline-highlight',
+            data.isCurrent ? 'border-4 shadow-ink' : 'border-2 bg-card shadow-ink-sm',
+          )}
+          style={data.isCurrent ? { backgroundColor: step.soft } : undefined}
+        >
+          <Handle
+            type="target"
+            position={Position.Left}
+            className={HANDLE_CLASS}
+            isConnectable={false}
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            className={HANDLE_CLASS}
+            isConnectable={false}
+          />
+          {data.isCurrent ? <NewSticker isNew={data.isNew} /> : null}
+
+          <p
+            className={clsx(
+              'text-[12px] leading-tight',
+              data.isCurrent ? 'font-black' : 'font-bold',
+            )}
+            style={{ color: step.color }}
+          >
+            其余 {data.count} 条来源
+          </p>
+          <p className="mt-1 truncate text-[11px] font-bold text-muted">画布空间有限，已折叠</p>
+          <p className="mt-1 text-[11px] font-black text-muted">→ 点击展开</p>
+        </div>
+      </div>
+    </PopIn>
+  );
+}
+
+function renderEvidenceCard(data: GraphNodeData) {
   switch (data.kind) {
     case 'claim':
       return <ClaimCard data={data} />;
@@ -550,7 +694,17 @@ function EvidenceNode({ data }: NodeProps<GraphNode>) {
       return <SourceCard data={data} />;
     case 'group':
       return <GroupCard data={data} />;
+    case 'more':
+      return <MoreCard data={data} />;
   }
+}
+
+function EvidenceNode({ data }: NodeProps<GraphNode>) {
+  return (
+    <ErrorBoundary label="证据卡片">
+      {renderEvidenceCard(data)}
+    </ErrorBoundary>
+  );
 }
 
 function EvidenceEdge({ sourceX, sourceY, targetX, targetY, data }: EdgeProps<GraphEdge>) {
@@ -604,11 +758,13 @@ function EvidenceDrawer({
   selection,
   sources,
   groups,
+  more,
   onClose,
 }: {
   selection: Selection;
   sources: Source[];
   groups: SourceGroup[];
+  more?: { step: StepId; sourceIds: string[] };
   onClose: () => void;
 }) {
   const reduced = useReducedMotion();
@@ -617,6 +773,8 @@ function EvidenceDrawer({
 
   const source = selection.kind === 'source' ? sourceById.get(selection.id) : undefined;
   const group = selection.kind === 'group' ? groupById.get(selection.id) : undefined;
+  const moreSources = more ? more.sourceIds.flatMap((id) => sourceById.get(id) ?? []) : [];
+  const title = group ? '同源转载' : more ? '其余来源' : '来源详情';
 
   return (
     <motion.aside
@@ -628,7 +786,7 @@ function EvidenceDrawer({
       aria-label="证据详情"
     >
       <header className="flex shrink-0 items-center justify-between border-b-2 border-ink/15 px-4 py-3">
-        <h2 className="text-sm font-black text-ink">{group ? '同源转载' : '来源详情'}</h2>
+        <h2 className="text-sm font-black text-ink">{title}</h2>
         <button
           type="button"
           onClick={onClose}
@@ -642,7 +800,10 @@ function EvidenceDrawer({
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 text-sm">
         {source ? <SourceDetail source={source} group={groupById.get(source.groupId ?? '')} /> : null}
         {group ? <GroupDetail group={group} sourceById={sourceById} /> : null}
-        {!source && !group ? <p className="text-xs font-bold text-muted">该节点已不在当前视图中。</p> : null}
+        {more ? <MoreDetail sources={moreSources} step={more.step} /> : null}
+        {!source && !group && !more ? (
+          <p className="text-xs font-bold text-muted">该节点已不在当前视图中。</p>
+        ) : null}
       </div>
     </motion.aside>
   );
@@ -654,10 +815,20 @@ function SourceDetail({ source, group }: { source: Source; group: SourceGroup | 
   return (
     <>
       <p className="text-[11px] font-bold" style={{ color: step.color }}>
-        {source.site} · {formatDay(source.publishedAt)}
+        {sourceSiteLabel(source)} · {formatSourceTime(source.publishedAt, 'day')}
       </p>
-      <h3 className="text-base font-black leading-snug text-ink">{source.title || '暂无标题'}</h3>
-      <p className="text-xs leading-relaxed text-ink">{source.snippet || '暂无摘要'}</p>
+      <h3
+        className="line-clamp-3 text-base font-black leading-snug text-ink"
+        title={sourceTitleLabel(source)}
+      >
+        {sourceTitleLabel(source)}
+      </h3>
+      <p
+        className="line-clamp-6 text-xs leading-relaxed text-ink"
+        title={clipText(sourceSnippetLabel(source), 300)}
+      >
+        {sourceSnippetLabel(source)}
+      </p>
       <div className="flex items-center gap-2">
         <StanceMark stance={source.stance ?? null} />
       </div>
@@ -677,6 +848,44 @@ function SourceDetail({ source, group }: { source: Source; group: SourceGroup | 
       >
         打开原文 ↗
       </a>
+    </>
+  );
+}
+
+function MoreDetail({ sources, step }: { sources: Source[]; step: StepId }) {
+  const meta = stepById(step);
+
+  return (
+    <>
+      <p className="text-[11px] font-bold" style={{ color: meta.color }}>
+        {meta.name} · 已折叠 {sources.length} 条
+      </p>
+      <h3 className="text-base font-black leading-snug text-ink">
+        其余 {sources.length} 条来源
+      </h3>
+      <p className="text-[11px] leading-relaxed text-muted">
+        为保持画布清晰，这些来源未在图上展开；点击可直接打开原文。
+      </p>
+      <ul className="space-y-2">
+        {sources.map((source) => (
+          <li key={source.id} className="rounded-xl border-2 border-ink/15 bg-paper p-2.5">
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block text-xs font-bold leading-snug text-ink underline underline-offset-2 hover:text-brand-dark"
+            >
+              {sourceSiteLabel(source)} · {sourceTitleLabel(source)}
+            </a>
+            <p className="mt-1 text-[11px] text-muted">
+              {formatSourceTime(source.publishedAt, 'day')}
+            </p>
+          </li>
+        ))}
+        {sources.length === 0 ? (
+          <li className="text-[11px] text-muted">暂无可展示的来源。</li>
+        ) : null}
+      </ul>
     </>
   );
 }
@@ -714,7 +923,7 @@ function GroupDetail({
             rel="noopener noreferrer"
             className="mt-1 block text-xs font-bold leading-snug text-brand-dark underline underline-offset-2"
           >
-            {origin.site} · {origin.title || '打开首发原文'}
+            {sourceSiteLabel(origin)} · {sourceTitleLabel(origin)}
           </a>
         </div>
       ) : null}
@@ -730,7 +939,7 @@ function GroupDetail({
                 rel="noopener noreferrer"
                 className="block text-xs font-bold leading-snug text-ink underline underline-offset-2 hover:text-brand-dark"
               >
-                {member.site} · {member.title || member.url}
+                {sourceSiteLabel(member)} · {sourceTitleLabel(member)}
               </a>
             </li>
           ))}
@@ -752,6 +961,7 @@ function EvidenceGraphInner({
   viewStep,
   focusSourceId,
   focusNonce,
+  empty = false,
 }: EvidenceGraphProps) {
   const flow = useReactFlow<GraphNode, GraphEdge>();
   const reduced = useReducedMotion();
@@ -785,12 +995,22 @@ function EvidenceGraphInner({
       ) {
         return entity.id;
       }
+
+      if (entity.kind === 'more' && entity.sourceIds.includes(focusSourceId)) {
+        return entity.id;
+      }
     }
 
     return null;
   }, [entities, focusSourceId]);
 
   const visibleEntities = entities.filter((entity) => entity.step <= viewStep);
+
+  const moreSelection = useMemo(() => {
+    if (selection?.kind !== 'more') return null;
+    const entity = entities.find((item) => item.kind === 'more' && item.id === selection.id);
+    return entity?.kind === 'more' ? { step: entity.step, sourceIds: entity.sourceIds } : null;
+  }, [entities, selection]);
 
   const nodes = visibleEntities.map((entity): GraphNode => {
     const isCurrent = viewStep === revealedStep && entity.step === viewStep;
@@ -823,7 +1043,7 @@ function EvidenceGraphInner({
         position,
         draggable: false,
         selectable: false,
-        ariaLabel: `来源：${entity.source.site}`,
+        ariaLabel: `来源：${sourceSiteLabel(entity.source)}`,
         data: {
           kind: 'source',
           step: entity.step,
@@ -831,10 +1051,30 @@ function EvidenceGraphInner({
           isNew,
           isFocused: entity.id === focusEntityId,
           sourceId: entity.source.id,
-          site: entity.source.site,
-          date: formatMonth(entity.source.publishedAt),
+          site: sourceSiteLabel(entity.source),
+          date: formatSourceTime(entity.source.publishedAt, 'month'),
           quote: quoteOf(entity.source),
           stance: entity.source.stance ?? null,
+        },
+      };
+    }
+
+    if (entity.kind === 'more') {
+      return {
+        id: entity.id,
+        type: 'evidence',
+        position,
+        draggable: false,
+        selectable: false,
+        ariaLabel: `其余 ${entity.sourceIds.length} 条来源`,
+        data: {
+          kind: 'more',
+          step: entity.step,
+          isCurrent,
+          isNew,
+          isFocused: entity.id === focusEntityId,
+          moreId: entity.id,
+          count: entity.sourceIds.length,
         },
       };
     }
@@ -927,6 +1167,8 @@ function EvidenceGraphInner({
               setSelection({ kind: 'source', id: node.data.sourceId });
             } else if (node.data.kind === 'group') {
               setSelection({ kind: 'group', id: node.data.groupId });
+            } else if (node.data.kind === 'more') {
+              setSelection({ kind: 'more', id: node.data.moreId });
             }
           }}
           onPaneClick={() => setSelection(null)}
@@ -966,9 +1208,21 @@ function EvidenceGraphInner({
 
         {!claim ? (
           <div className="pointer-events-none absolute inset-0 grid place-items-center">
-            <p className="rounded-xl border-2 border-dashed border-ink/25 bg-card/75 px-5 py-3 text-xs font-bold text-muted">
-              等待拆解疑点…
-            </p>
+            {empty ? (
+              <div className="flex max-w-[320px] flex-col items-center gap-2 text-center">
+                <DetectiveMascot mood="yawn" className="w-[104px] -rotate-3" />
+                <p className="rounded-xl border-2 border-dashed border-ink/25 bg-card/90 px-5 py-3 text-sm font-black text-ink">
+                  这条消息没有可核查的事实
+                </p>
+                <p className="text-xs font-bold text-muted">
+                  试试补充具体的人物、时间、数字或因果，再重新立案
+                </p>
+              </div>
+            ) : (
+              <p className="rounded-xl border-2 border-dashed border-ink/25 bg-card/75 px-5 py-3 text-xs font-bold text-muted">
+                等待拆解疑点…
+              </p>
+            )}
           </div>
         ) : null}
 
@@ -981,6 +1235,7 @@ function EvidenceGraphInner({
               selection={selection}
               sources={sources}
               groups={groups}
+              more={moreSelection ?? undefined}
               onClose={() => setSelection(null)}
             />
           ) : null}

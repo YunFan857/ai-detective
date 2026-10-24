@@ -8,7 +8,9 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { findDemoCaseByInput, loadDemoCase, loadPreview } from '../../../lib/case-store';
+import { InvalidImageError, VisionUnavailableError } from '../../../lib/llm';
 import { runInvestigation } from '../../../lib/pipeline';
+import { extractImageIntake, ImageTextMissingError } from '../../../lib/pipeline/intake';
 import { caseFileToEvents, type ReplayEvent } from '../../../lib/replay';
 import {
   CaseEventSchema,
@@ -193,6 +195,45 @@ async function startFromPreview(
   });
 }
 
+/**
+ * 图片立案：先转写截图文字与画面线索，再把结果接入现有查证流水线。
+ * 识别失败返回 4xx；未配置视觉模型返回 501，避免伪装成查证失败。
+ */
+async function startFromImage(request: Request, body: Body): Promise<Response> {
+  const image = body.image?.trim();
+  if (!image) {
+    return fail(400, 'invalid_image', '缺少图片数据');
+  }
+
+  const mode = body.mode ?? 'factcheck';
+  if (process.env.USE_MOCK === 'true' || body.mock === true) {
+    const events = await loadMockEvents(
+      mode === 'scriptcheck' ? 'script-events-demo.json' : 'events-demo.json',
+    );
+    return streamResponse(request, replayEvents(events));
+  }
+
+  let intake: Awaited<ReturnType<typeof extractImageIntake>>;
+  try {
+    intake = await extractImageIntake(image, { signal: request.signal });
+  } catch (error) {
+    if (error instanceof VisionUnavailableError) {
+      return fail(501, 'vision_not_deployed', '截图已提交，但图片查证能力尚未部署');
+    }
+    if (error instanceof InvalidImageError) {
+      return fail(400, 'invalid_image', messageOf(error));
+    }
+    if (error instanceof ImageTextMissingError) {
+      return fail(422, 'image_unreadable', messageOf(error));
+    }
+    return fail(502, 'image_extract_failed', `截图识别失败：${messageOf(error)}`);
+  }
+
+  return streamResponse(request, async (emit, signal) => {
+    await runInvestigation(intake.input, emit, { signal, mode });
+  });
+}
+
 export async function POST(request: Request): Promise<Response> {
   let payload: unknown;
   try {
@@ -210,13 +251,18 @@ export async function POST(request: Request): Promise<Response> {
   const text = body.text?.trim() ?? '';
   const inputType = body.inputType ?? 'text';
 
-  if (inputType !== 'text') {
-    return fail(501, 'unsupported_input_type', '当前阶段仅支持文本输入，链接 / 图片 / 视频解析尚未接入');
+  if (inputType !== 'text' && inputType !== 'image') {
+    return fail(501, 'unsupported_input_type', '当前阶段仅支持文本与图片输入，链接 / 视频解析尚未接入');
   }
 
   try {
+    // 已确认的预览优先：图片立案也会先拆疑点，确认后带 previewId 直接深查。
     if (body.previewId) {
       return await startFromPreview(request, body, text);
+    }
+
+    if (inputType === 'image') {
+      return await startFromImage(request, body);
     }
 
     const mode = body.mode ?? 'factcheck';

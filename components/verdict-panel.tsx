@@ -5,7 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MutationTimeline } from '@/components/mutation-timeline';
 import { ComicButton } from '@/components/ui/comic-button';
 import { VerdictBadge } from '@/components/ui/verdict-badge';
-import { VERDICT_STAMP_FILL, verdictLabel } from '@/lib/labels';
+import {
+  sourceSiteLabel,
+  sourceTitleLabel,
+  VERDICT_STAMP_FILL,
+  verdictLabel,
+} from '@/lib/labels';
 import { stepOfTier, type StepId } from '@/lib/steps';
 import type { Claim, Source, TimelineStep, Verdict } from '@/types/case';
 
@@ -47,8 +52,9 @@ const CITATION_SEGMENT = /(\[[^\]]+\])/g;
 const FEEDBACK_MS = 1800;
 
 /** 站点缩写：域名取首段，中文站点取前四个字。 */
-export function siteAbbreviation(site: string): string {
-  const primary = site.split(/[(（·｜\s]/)[0]?.trim() || site.trim();
+export function siteAbbreviation(source: Pick<Source, 'site' | 'url'>): string {
+  const label = sourceSiteLabel(source);
+  const primary = label.split(/[(（·｜\s]/)[0]?.trim() || label.trim();
   const host = primary.replace(/^www\./i, '');
 
   if (/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(host)) {
@@ -121,7 +127,10 @@ function buildCitationText(verdict: Verdict, sourcesById: Record<string, Source>
   const lines = Array.from(ids)
     .map((id) => sourcesById[id])
     .filter((source): source is Source => Boolean(source))
-    .map((source) => `· ${source.site}：${source.title || '暂无标题'}\n  ${source.url}`);
+    .map(
+      (source) =>
+        `· ${sourceSiteLabel(source)}：${sourceTitleLabel(source)}\n  ${source.url}`,
+    );
 
   const head = `【${verdictLabel(verdict.level)}】${verdict.headline}`;
   return lines.length > 0
@@ -139,12 +148,12 @@ function CitationBadge({
   return (
     <button
       type="button"
-      title={source.title || source.url}
-      aria-label={`查看出处：${source.site}${source.title ? ` · ${source.title}` : ''}`}
+      title={sourceTitleLabel(source)}
+      aria-label={`查看出处：${sourceSiteLabel(source)} · ${sourceTitleLabel(source)}`}
       onClick={() => onSelect(source)}
       className="mx-0.5 inline-flex translate-y-[-1px] items-baseline rounded border border-blue bg-blue-soft px-1 py-0.5 align-baseline text-[10px] leading-none font-black text-blue transition-colors hover:bg-blue hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark"
     >
-      {siteAbbreviation(source.site)}
+      {siteAbbreviation(source)}
     </button>
   );
 }
@@ -222,6 +231,8 @@ function VerdictDialog({
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const percent = Math.round(verdict.confidence * 100);
+  /** 疑点为 0：后端仍会返回一份判决，但判决书需要说清「没有可核查的事实」。 */
+  const noFacts = claims.length === 0 && verdict.claims.length === 0;
   const resolve = useMemo(
     () => buildCitationResolver(sourcesById, sourceOrder),
     [sourcesById, sourceOrder],
@@ -348,7 +359,7 @@ function VerdictDialog({
                   aria-hidden
                   className="absolute inset-x-0 bottom-0.5 -z-10 h-2.5 -rotate-1 rounded-sm bg-brand/35"
                 />
-                {verdict.headline}
+                {noFacts ? '这条消息没有可核查的事实' : verdict.headline}
               </span>
             </h3>
 
@@ -388,7 +399,12 @@ function VerdictDialog({
                         <VerdictBadge level={claimVerdict.level} size="sm" />
                         <p className="min-w-0 flex-1 text-xs leading-5 font-black text-ink">{text}</p>
                       </div>
-                      <p className="mt-1 text-[11px] leading-5 text-muted">{claimVerdict.summary}</p>
+                      <p
+                        className="mt-1 line-clamp-3 text-[11px] leading-5 text-muted"
+                        title={claimVerdict.summary}
+                      >
+                        {claimVerdict.summary}
+                      </p>
                     </div>
                   );
                 })}

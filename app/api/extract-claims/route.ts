@@ -1,12 +1,14 @@
 /**
  * 拆疑点接口：返回预览，前端勾选后再带 previewId 立案。
- * 当前阶段只支持文本；链接 / 图片解析等 intake 接入后再放开。
+ * 支持文本与图片输入；图片先经视觉模型转写，再按文本拆疑点。
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { InvalidImageError, VisionUnavailableError } from '../../../lib/llm';
 import { previewClaims } from '../../../lib/pipeline';
+import { extractImageIntake, ImageTextMissingError } from '../../../lib/pipeline/intake';
 import { findDemoPreviewByInput } from '../../../lib/case-store';
 import {
   ClaimsPreviewSchema,
@@ -62,9 +64,37 @@ export async function POST(request: Request): Promise<Response> {
   const body = parsed.data;
   const mode: Mode = body.mode ?? 'factcheck';
   const inputType = body.inputType ?? 'text';
+  const useMock = process.env.USE_MOCK === 'true';
 
-  if (inputType !== 'text') {
-    return fail(501, 'unsupported_input_type', '当前阶段仅支持文本输入，链接 / 图片解析尚未接入');
+  if (inputType !== 'text' && inputType !== 'image') {
+    return fail(501, 'unsupported_input_type', '当前阶段仅支持文本与图片输入，链接解析尚未接入');
+  }
+
+  // 图片先转写再拆疑点；识别失败 / 未部署分别返回 4xx 与 501。
+  if (inputType === 'image') {
+    try {
+      if (useMock) {
+        return NextResponse.json(await loadMockPreview(mode));
+      }
+      const image = body.image?.trim();
+      if (!image) {
+        return fail(400, 'invalid_image', '缺少图片数据');
+      }
+      const intake = await extractImageIntake(image, { signal: request.signal });
+      const preview = await previewClaims(intake.input, { mode, inputType: 'image' });
+      return NextResponse.json(preview);
+    } catch (error) {
+      if (error instanceof VisionUnavailableError) {
+        return fail(501, 'vision_not_deployed', '截图已提交，但图片查证能力尚未部署');
+      }
+      if (error instanceof InvalidImageError) {
+        return fail(400, 'invalid_image', messageOf(error));
+      }
+      if (error instanceof ImageTextMissingError) {
+        return fail(422, 'image_unreadable', messageOf(error));
+      }
+      return fail(500, 'extract_failed', messageOf(error));
+    }
   }
 
   const text = body.text?.trim() ?? '';
@@ -77,7 +107,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    if (process.env.USE_MOCK === 'true') {
+    if (useMock) {
       // 演示模式优先用 cache 里的预热预览，断网也能完成「拆疑点 → 立案」两步。
       const demo = await findDemoPreviewByInput(text);
       return NextResponse.json(demo ?? (await loadMockPreview(mode)));

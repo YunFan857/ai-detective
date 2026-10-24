@@ -1,7 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState, type ComponentType, type SVGProps } from 'react';
-import { useRouter } from 'next/navigation';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type SVGProps,
+} from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { SpeechBubble } from '@/components/ui/speech-bubble';
 import {
@@ -26,19 +33,88 @@ const MODES: { id: Mode; label: string; Icon: Icon; badge?: string }[] = [
 
 const TEXT_LIMIT = 500;
 const TEXT_MIN = 4;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** 压缩后最长边与目标体积：保证会话存储放得下，也够识别截图文字。 */
+const MAX_IMAGE_EDGE = 1600;
+const TARGET_IMAGE_BYTES = 1024 * 1024;
+const IMAGE_STORAGE_KEY = 'intake-image';
+
+const HOME_NOTICES: Record<string, string> = {
+  'image-expired': '图片已失效，请重新上传',
+  'image-retry': '请重新上传一张更清晰的截图',
+};
 
 function formatSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
+/** data URL 里 base64 的实际字节数，用于把压缩结果控制在会话存储上限内。 */
+function estimateDataUrlBytes(dataUrl: string): number {
+  const comma = dataUrl.indexOf(',');
+  if (comma < 0) return dataUrl.length;
+  return Math.ceil(((dataUrl.length - comma - 1) * 3) / 4);
+}
+
+/** 截图压成 JPEG data URL：最长边 1600，体积不超过 1MB。 */
+async function compressImage(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+
+  try {
+    let scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
+    let dataUrl = '';
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('当前浏览器不支持压缩图片');
+
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, width, height);
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(bitmap, 0, 0, width, height);
+
+      dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      for (
+        let quality = 0.75;
+        estimateDataUrlBytes(dataUrl) > TARGET_IMAGE_BYTES && quality >= 0.45;
+        quality -= 0.1
+      ) {
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
+
+      if (estimateDataUrlBytes(dataUrl) <= TARGET_IMAGE_BYTES) break;
+      scale *= 0.75;
+    }
+
+    return dataUrl;
+  } finally {
+    bitmap.close();
+  }
+}
+
 export function HomeInputCard() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>('text');
+  const searchParams = useSearchParams();
+  const noticeCode = searchParams.get('notice');
+  const notice = noticeCode ? HOME_NOTICES[noticeCode] : undefined;
+  const [mode, setMode] = useState<Mode>(noticeCode ? 'image' : 'text');
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [locked, setLocked] = useState(false);
   const [listening, setListening] = useState(false);
-  const [file, setFile] = useState<{ name: string; size: number; preview: string } | null>(null);
+  const [file, setFile] = useState<{
+    raw: File;
+    name: string;
+    size: number;
+    preview: string;
+  } | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -48,6 +124,25 @@ export function HomeInputCard() {
     };
   }, [file]);
 
+  const acceptFile = useCallback((next: File | undefined) => {
+    if (!next) return;
+    if (!next.type.startsWith('image/')) {
+      setFileError('只支持 jpg / png / webp 图片');
+      return;
+    }
+    if (next.size > MAX_IMAGE_BYTES) {
+      setFileError(`图片不能超过 5MB，当前 ${formatSize(next.size)}`);
+      return;
+    }
+
+    setFileError(null);
+    const preview = URL.createObjectURL(next);
+    setFile((previous) => {
+      if (previous) URL.revokeObjectURL(previous.preview);
+      return { raw: next, name: next.name || '截图', size: next.size, preview };
+    });
+  }, []);
+
   // 图片模式下支持直接 ⌘V 粘贴截图，不必先点虚线框。
   useEffect(() => {
     if (mode !== 'image') return;
@@ -55,21 +150,11 @@ export function HomeInputCard() {
       const next = event.clipboardData?.files[0];
       if (!next) return;
       event.preventDefault();
-      const preview = URL.createObjectURL(next);
-      setFile((previous) => {
-        if (previous) URL.revokeObjectURL(previous.preview);
-        return { name: next.name, size: next.size, preview };
-      });
+      acceptFile(next);
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [mode]);
-
-  function pickFile(next: File | undefined) {
-    if (!next || !next.type.startsWith('image/')) return;
-    if (file?.preview) URL.revokeObjectURL(file.preview);
-    setFile({ name: next.name, size: next.size, preview: URL.createObjectURL(next) });
-  }
+  }, [acceptFile, mode]);
 
   const host = (() => {
     try {
@@ -80,13 +165,41 @@ export function HomeInputCard() {
   })();
 
   const trimmedText = text.trim();
+  const textTooShort = trimmedText.length > 0 && trimmedText.length < TEXT_MIN;
+  const textTooLong = trimmedText.length > TEXT_LIMIT;
+  /** 文本模式的校验提示：太短或太长时按钮禁用并说明原因。 */
+  const textHint = textTooLong
+    ? `最多 ${TEXT_LIMIT} 个字，当前 ${trimmedText.length} 字`
+    : textTooShort
+      ? `至少 ${TEXT_MIN} 个字，还差 ${TEXT_MIN - trimmedText.length} 个字`
+      : null;
   const canSubmit =
-    (mode === 'text' && trimmedText.length >= TEXT_MIN && trimmedText.length <= TEXT_LIMIT) ||
+    (mode === 'text' && !textHint && trimmedText.length >= TEXT_MIN) ||
     (mode === 'link' && host.length > 0) ||
     (mode === 'image' && file !== null);
 
-  function handleSubmit() {
-    if (!canSubmit) return;
+  async function handleSubmit() {
+    if (!canSubmit || submitting) return;
+
+    if (mode === 'image' && file) {
+      setSubmitting(true);
+      setFileError(null);
+      try {
+        const dataUrl = await compressImage(file.raw);
+        sessionStorage.setItem(IMAGE_STORAGE_KEY, dataUrl);
+        router.push('/case?mode=real&input=image');
+      } catch (error) {
+        setFileError(
+          error instanceof DOMException
+            ? '截图太大，浏览器存不下，换一张更小的截图试试'
+            : '截图压缩失败，换一张 jpg / png 图片试试',
+        );
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     const isMock =
       typeof window !== 'undefined' &&
       new URLSearchParams(window.location.search).get('mode') === 'mock';
@@ -116,6 +229,16 @@ export function HomeInputCard() {
         <span className="absolute -top-3 right-7 rotate-6 rounded-md border-2 border-ink bg-coral px-2.5 py-0.5 text-xs font-black text-white shadow-ink-sm">
           报案单
         </span>
+
+        {notice && !file ? (
+          <p
+            role="status"
+            className="mb-3 flex items-center gap-2 rounded-xl border-2 border-coral bg-coral-soft px-3 py-2 text-sm font-black text-coral"
+          >
+            <span aria-hidden>⚠️</span>
+            {notice}
+          </p>
+        ) : null}
 
         {/* 输入方式 */}
         <div
@@ -155,7 +278,6 @@ export function HomeInputCard() {
               <textarea
                 value={text}
                 onChange={(event) => setText(event.target.value)}
-                maxLength={TEXT_LIMIT}
                 rows={3}
                 aria-label="要查证的消息"
                 placeholder="把朋友圈、家族群里那条可疑消息贴进来……"
@@ -163,11 +285,11 @@ export function HomeInputCard() {
               />
               <span
                 className={`absolute bottom-3 left-4 text-xs ${
-                  trimmedText.length > 0 && trimmedText.length < TEXT_MIN ? 'text-coral' : 'text-muted'
+                  textHint ? 'text-coral' : 'text-muted'
                 }`}
               >
                 {text.length} / {TEXT_LIMIT}
-                {trimmedText.length > 0 && trimmedText.length < TEXT_MIN ? ' · 至少 4 个字' : ''}
+                {textHint ? ` · ${textHint}` : ''}
               </span>
 
               <div className="absolute right-4 bottom-3 flex items-end gap-2">
@@ -251,9 +373,8 @@ export function HomeInputCard() {
                 onDrop={(event) => {
                   event.preventDefault();
                   setDragging(false);
-                  pickFile(event.dataTransfer.files[0]);
+                  acceptFile(event.dataTransfer.files[0]);
                 }}
-                onPaste={(event) => pickFile(event.clipboardData.files[0])}
                 onClick={() => fileRef.current?.click()}
                 role="button"
                 tabIndex={0}
@@ -279,11 +400,13 @@ export function HomeInputCard() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(event) => pickFile(event.target.files?.[0])}
+                  onChange={(event) => acceptFile(event.target.files?.[0])}
                 />
               </div>
               <p className="mt-2 text-xs text-muted">
-                {file ? (
+                {fileError ? (
+                  <span className="font-black text-coral">⚠️ {fileError}</span>
+                ) : file ? (
                   <span className="font-bold text-brand-deep">
                     ✓ 已收下 1 张 · {file.name} · {formatSize(file.size)}
                   </span>
@@ -328,10 +451,19 @@ export function HomeInputCard() {
         {/* 提示 + 立案 */}
         <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
           {mode === 'text' ? (
-            <p className="mr-auto flex items-center gap-1.5 text-xs text-muted">
-              <ScribbleIcon className="h-3.5 w-3.5" />
-              说出来也行，识别的字会出现在框里，可以再改
-            </p>
+            textHint ? (
+              <p
+                role="status"
+                className="mr-auto flex items-center gap-1.5 text-xs font-black text-coral"
+              >
+                ⚠️ {textHint}，暂不能立案
+              </p>
+            ) : (
+              <p className="mr-auto flex items-center gap-1.5 text-xs text-muted">
+                <ScribbleIcon className="h-3.5 w-3.5" />
+                说出来也行，识别的字会出现在框里，可以再改
+              </p>
+            )
           ) : null}
           {mode === 'link' ? (
             <p className="mr-auto text-xs text-muted">
@@ -341,12 +473,12 @@ export function HomeInputCard() {
 
           <button
             type="button"
-            disabled={!canSubmit}
+            disabled={!canSubmit || submitting}
             onClick={handleSubmit}
             className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand px-6 py-2.5 text-base font-black text-white shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:border-gray disabled:bg-gray-soft disabled:text-gray disabled:shadow-none"
           >
-            <span aria-hidden>🕵️</span>
-            立案调查
+            <span aria-hidden>{submitting ? '⏳' : '🕵️'}</span>
+            {submitting ? '正在整理截图…' : '立案调查'}
           </button>
         </div>
       </div>

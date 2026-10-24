@@ -1,4 +1,4 @@
-import type { Claim, Stance, Stage, Tier, VerdictLevel } from '@/types/case';
+import type { Claim, Source, Stance, Stage, Tier, VerdictLevel } from '@/types/case';
 
 /**
  * 枚举 → 中文与配色的唯一映射。
@@ -185,10 +185,96 @@ export const CLAIM_KIND_LABELS: Record<Claim['kind'], string> = {
   other: '其他',
 };
 
+/** 疑点风险等级：拆疑点确认页用来提示先查哪几条。 */
+export const RISK_META: Record<NonNullable<Claim['riskLevel']>, ToneMeta> = {
+  high: {
+    label: '高风险',
+    bg: 'bg-red-soft',
+    text: 'text-red',
+    border: 'border-red',
+    solid: 'bg-red',
+    dot: 'bg-red',
+  },
+  medium: {
+    label: '中风险',
+    bg: 'bg-orange-soft',
+    text: 'text-orange',
+    border: 'border-orange',
+    solid: 'bg-orange',
+    dot: 'bg-orange',
+  },
+  low: {
+    label: '低风险',
+    bg: 'bg-gray-soft',
+    text: 'text-gray',
+    border: 'border-gray',
+    solid: 'bg-gray',
+    dot: 'bg-gray',
+  },
+};
+
 export const DIRECTION_LABELS = {
   pro: '正方',
   con: '反方',
 } as const;
+
+/** 站点名缺失时退回域名；域名也取不到时显示「来源不详」。 */
+export function siteLabel(site: string | undefined, url?: string): string {
+  const trimmed = site?.trim();
+  if (trimmed) return trimmed;
+
+  if (url) {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./i, '');
+      if (host) return host;
+    } catch {
+      // 非法链接按缺失处理
+    }
+  }
+
+  return '来源不详';
+}
+
+/** 来源卡片统一取站点名：空站点名用域名兜底。 */
+export function sourceSiteLabel(source: Pick<Source, 'site' | 'url'>): string {
+  return siteLabel(source.site, source.url);
+}
+
+/** 标题缺失或只有空白时统一占位。 */
+export function sourceTitleLabel(source: Pick<Source, 'title'>): string {
+  return source.title.trim() || '暂无标题';
+}
+
+/** 摘要缺失时退回标题，再退回占位。 */
+export function sourceSnippetLabel(source: Pick<Source, 'snippet' | 'title'>): string {
+  return source.snippet.trim() || source.title.trim() || '暂无摘要';
+}
+
+/** ISO 时间格式化；缺失或无法解析统一显示「时间不详」。 */
+export function formatSourceTime(
+  publishedAt: string | undefined,
+  precision: 'year' | 'month' | 'day',
+): string {
+  if (!publishedAt) return '时间不详';
+
+  const timestamp = Date.parse(publishedAt);
+  if (Number.isNaN(timestamp)) return '时间不详';
+
+  const date = new Date(timestamp);
+  const year = String(date.getUTCFullYear());
+  if (precision === 'year') return year;
+
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  if (precision === 'month') return `${year}-${month}`;
+
+  return `${year}-${month}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+/** 长文本截断，用于 title 属性等无法使用 line-clamp 的位置。 */
+export function clipText(text: string, maxLength: number): string {
+  const trimmed = text.trim();
+  return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
+}
 
 export function tierLabel(tier: Tier): string {
   return TIER_META[tier].label;

@@ -7,6 +7,7 @@ import { playEvents, type PlayableEvent } from '@/lib/mock-stream';
 import {
   CaseEventSchema,
   type CaseEvent,
+  type CaseFile,
   type Claim,
   type Source,
   type SourceGroup,
@@ -34,9 +35,20 @@ export type FeedEvent =
   | { type: 'error'; at: number; message: string; recoverable: boolean }
   | { type: 'verdict'; at: number; verdict: Verdict };
 
+/**
+ * 调查失败原因：
+ * http=接口返回非 2xx；network=网络断开；stream=事件流没收到 done 就结束；
+ * server=服务端推送了不可恢复的 error 事件。
+ */
+export type InvestigationFailure =
+  | { kind: 'http'; status: number; message: string }
+  | { kind: 'network' | 'stream' | 'server'; message: string };
+
 export type InvestigationState = {
   caseId: string | null;
   input: string;
+  /** 图片立案时压缩后的截图（data URL），用于来源小卡缩略图。 */
+  inputImage: string | null;
   status: 'idle' | 'running' | 'done' | 'error';
   currentStage: Stage | null;
   logs: BroadcastLog[];
@@ -54,6 +66,8 @@ export type InvestigationState = {
   verdict: Verdict | null;
   stats: Stats | null;
   errors: string[];
+  /** 终止本次调查的原因；running/done 时为 null。 */
+  failure: InvestigationFailure | null;
 };
 
 export type StartOptions =
@@ -61,7 +75,14 @@ export type StartOptions =
   | { mode: 'demo'; demoId: string }
   | { mode: 'real'; inputType: 'text'; text: string }
   | { mode: 'real'; inputType: 'link'; url: string }
-  | { mode: 'real'; inputType: 'image'; image: string };
+  | {
+      mode: 'real';
+      inputType: 'image';
+      image: string;
+      /** 已确认的拆疑点预览；传入后跳过视觉转写，只深查选中的疑点。 */
+      previewId?: string;
+      selectedClaimIds?: string[];
+    };
 
 export type InvestigationController = {
   state: InvestigationState;
@@ -72,6 +93,7 @@ export type InvestigationController = {
 const INITIAL_STATE: InvestigationState = {
   caseId: null,
   input: '',
+  inputImage: null,
   status: 'idle',
   currentStage: null,
   logs: [],
@@ -86,6 +108,7 @@ const INITIAL_STATE: InvestigationState = {
   verdict: null,
   stats: null,
   errors: [],
+  failure: null,
 };
 
 /** mock 数据在模块加载时按契约校验一次；delayMs 是回放用的额外字段。 */
@@ -94,9 +117,9 @@ const DEMO_EVENTS: PlayableEvent[] = z
   .parse(demoEventsJson);
 
 type Action =
-  | { type: 'start' }
+  | { type: 'start'; inputImage?: string }
   | { type: 'stop' }
-  | { type: 'fail'; message: string }
+  | { type: 'fail'; failure: InvestigationFailure }
   | { type: 'event'; event: CaseEvent; at: number };
 
 function applyEvent(state: InvestigationState, event: CaseEvent, at: number): InvestigationState {
@@ -180,6 +203,9 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
         ...state,
         status: event.recoverable ? state.status : 'error',
         errors: [...state.errors, event.message],
+        failure: event.recoverable
+          ? state.failure
+          : { kind: 'server', message: event.message },
         feed: [
           ...state.feed,
           {
@@ -210,6 +236,7 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
         verdict: event.caseFile.verdict,
         stats: event.caseFile.stats,
         errors: [],
+        failure: null,
       };
   }
 
@@ -219,13 +246,22 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
 function investigationReducer(state: InvestigationState, action: Action): InvestigationState {
   switch (action.type) {
     case 'start':
-      return { ...INITIAL_STATE, status: 'running' };
+      return {
+        ...INITIAL_STATE,
+        status: 'running',
+        inputImage: action.inputImage ?? null,
+      };
 
     case 'stop':
       return state.status === 'running' ? { ...state, status: 'idle' } : state;
 
     case 'fail':
-      return { ...state, status: 'error', errors: [...state.errors, action.message] };
+      return {
+        ...state,
+        status: 'error',
+        errors: [...state.errors, action.failure.message],
+        failure: action.failure,
+      };
 
     case 'event':
       return applyEvent(state, action.event, action.at);
@@ -234,7 +270,17 @@ function investigationReducer(state: InvestigationState, action: Action): Invest
 
 type StreamOptions = Exclude<StartOptions, { mode: 'mock' }>;
 
-function toRequestBody(options: StreamOptions): Record<string, string> {
+type RequestBody = {
+  demoId?: string;
+  inputType?: 'text' | 'link' | 'image';
+  text?: string;
+  url?: string;
+  image?: string;
+  previewId?: string;
+  selectedClaimIds?: string[];
+};
+
+function toRequestBody(options: StreamOptions): RequestBody {
   if (options.mode === 'demo') {
     return { demoId: options.demoId };
   }
@@ -245,8 +291,120 @@ function toRequestBody(options: StreamOptions): Record<string, string> {
     case 'link':
       return { inputType: 'link', url: options.url };
     case 'image':
-      return { inputType: 'image', image: options.image };
+      // 带 previewId 时后端直接用已确认的疑点，不再上传一遍图片。
+      return options.previewId
+        ? {
+            inputType: 'image',
+            previewId: options.previewId,
+            ...(options.selectedClaimIds?.length
+              ? { selectedClaimIds: options.selectedClaimIds }
+              : {}),
+          }
+        : { inputType: 'image', image: options.image };
   }
+}
+
+/** 开发期事件体检结果：同时打印到控制台并挂到 window 便于验收。 */
+type EventDiagnostics = {
+  eventTypes: Record<string, number>;
+  claims: number;
+  sources: number;
+  groups: number;
+  timelineClaims: number;
+  timelineSteps: number;
+  missingSite: number;
+  missingTitle: number;
+  missingSnippet: number;
+  missingPublishedAt: number;
+  unparsablePublishedAt: number;
+  nonHttpUrl: number;
+  maxTitleLength: number;
+  maxSnippetLength: number;
+  averageSnippetLength: number;
+  longestSnippets: { site: string; length: number; head: string }[];
+  emptySiteSamples: string[];
+  publishedAtSamples: string[];
+  verdictSummaryLength: number;
+  headlineLength: number;
+  rebuttalBodyLength: number;
+};
+
+type DebugWindow = Window & { __investigationDebug?: EventDiagnostics };
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '') || '域名不详';
+  } catch {
+    return '域名不详';
+  }
+}
+
+function collectDiagnostics(
+  counts: Map<string, number>,
+  caseFile?: CaseFile,
+): EventDiagnostics | undefined {
+  if (!caseFile) return undefined;
+
+  const sources = caseFile.sources;
+  const empty = (value: string): boolean => value.trim().length === 0;
+  const publishedDates = sources
+    .map((source) => source.publishedAt)
+    .filter((value): value is string => Boolean(value));
+  const snippets = sources.map((source) => source.snippet);
+  const timelines = Object.values(caseFile.timelines);
+  const timelineSteps = timelines.flat();
+  const longestSnippets = [...sources]
+    .sort((left, right) => right.snippet.length - left.snippet.length)
+    .slice(0, 3)
+    .map((source) => ({
+      site: source.site || hostOf(source.url),
+      length: source.snippet.length,
+      head: source.snippet.slice(0, 40),
+    }));
+
+  return {
+    eventTypes: Object.fromEntries([...counts.entries()].sort((a, b) => b[1] - a[1])),
+    claims: caseFile.claims.length,
+    sources: sources.length,
+    groups: caseFile.groups.length,
+    timelineClaims: timelines.length,
+    timelineSteps: timelineSteps.length,
+    missingSite: sources.filter((source) => empty(source.site)).length,
+    missingTitle: sources.filter((source) => empty(source.title)).length,
+    missingSnippet: sources.filter((source) => empty(source.snippet)).length,
+    missingPublishedAt: sources.length - publishedDates.length,
+    unparsablePublishedAt: publishedDates.filter((value) => Number.isNaN(Date.parse(value)))
+      .length,
+    nonHttpUrl: sources.filter((source) => !/^https?:\/\//i.test(source.url)).length,
+    maxTitleLength: sources.reduce((max, source) => Math.max(max, source.title.length), 0),
+    maxSnippetLength: snippets.reduce((max, snippet) => Math.max(max, snippet.length), 0),
+    averageSnippetLength: snippets.length
+      ? Math.round(snippets.reduce((total, snippet) => total + snippet.length, 0) / snippets.length)
+      : 0,
+    longestSnippets,
+    emptySiteSamples: sources
+      .filter((source) => empty(source.site))
+      .slice(0, 5)
+      .map((source) => source.url),
+    publishedAtSamples: publishedDates.slice(0, 5),
+    verdictSummaryLength: caseFile.verdict?.summary.length ?? 0,
+    headlineLength: caseFile.verdict?.headline.length ?? 0,
+    rebuttalBodyLength: caseFile.verdict?.rebuttalCard.body.length ?? 0,
+  };
+}
+
+function reportDiagnostics(counts: Map<string, number>, caseFile?: CaseFile): void {
+  if (process.env.NODE_ENV === 'production') return;
+
+  const diagnostics = collectDiagnostics(counts, caseFile);
+  if (!diagnostics) {
+    console.info('[investigate] 事件类型统计', Object.fromEntries(counts));
+    return;
+  }
+
+  console.info('[investigate] 事件类型统计', diagnostics.eventTypes);
+  console.info('[investigate] 真实数据体检', diagnostics);
+  (window as DebugWindow).__investigationDebug = diagnostics;
 }
 
 /**
@@ -256,6 +414,7 @@ function toRequestBody(options: StreamOptions): Record<string, string> {
 function drainEventBlocks(
   buffer: string,
   onEvent: (event: CaseEvent) => void,
+  onInvalid?: () => void,
 ): string {
   const blocks = buffer.replace(/\r\n/g, '\n').split('\n\n');
   const rest = blocks.pop() ?? '';
@@ -274,16 +433,29 @@ function drainEventBlocks(
       onEvent(CaseEventSchema.parse(parsed));
     } catch {
       // 单条事件解析失败时跳过，不中断整条事件流。
+      onInvalid?.();
     }
   }
 
   return rest;
 }
 
+/** 接口返回非 2xx：由页面展示「友好提示 + 返回首页」，不再重试当前流。 */
+class InvestigationHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`立案失败（HTTP ${status}）`);
+    this.name = 'InvestigationHttpError';
+    this.status = status;
+  }
+}
+
 async function consumeEventStream(
   options: StreamOptions,
   signal: AbortSignal,
   onEvent: (event: CaseEvent) => void,
+  onInvalid?: () => void,
 ): Promise<void> {
   const response = await fetch('/api/investigate', {
     method: 'POST',
@@ -293,10 +465,10 @@ async function consumeEventStream(
   });
 
   if (!response.ok) {
-    throw new Error(`立案失败（HTTP ${response.status}）`);
+    throw new InvestigationHttpError(response.status);
   }
   if (!response.body) {
-    throw new Error('立案失败（响应没有事件流）');
+    throw new Error('响应没有事件流');
   }
 
   const reader = response.body.getReader();
@@ -309,12 +481,12 @@ async function consumeEventStream(
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      buffer = drainEventBlocks(buffer, onEvent);
+      buffer = drainEventBlocks(buffer, onEvent, onInvalid);
     }
 
     buffer += decoder.decode();
     if (buffer.trim() !== '') {
-      drainEventBlocks(`${buffer}\n\n`, onEvent);
+      drainEventBlocks(`${buffer}\n\n`, onEvent, onInvalid);
     }
   } finally {
     reader.releaseLock();
@@ -338,7 +510,11 @@ export function useInvestigation(): InvestigationController {
   const start = useCallback((options: StartOptions) => {
     stopRef.current?.();
     stopRef.current = null;
-    dispatch({ type: 'start' });
+    dispatch({
+      type: 'start',
+      inputImage:
+        options.mode === 'real' && options.inputType === 'image' ? options.image : undefined,
+    });
 
     if (options.mode === 'mock') {
       const cancel = playEvents(
@@ -356,23 +532,56 @@ export function useInvestigation(): InvestigationController {
 
     void (async () => {
       let completed = false;
+      let reported = false;
+      /** 服务端已经推送不可恢复的错误，流随后关闭时不再重复判成「意外结束」。 */
+      let serverFailed = false;
+      const counts = new Map<string, number>();
+      const count = (type: string): void => {
+        counts.set(type, (counts.get(type) ?? 0) + 1);
+      };
+      const report = (caseFile?: CaseFile): void => {
+        if (reported) return;
+        reported = true;
+        reportDiagnostics(counts, caseFile);
+      };
 
       try {
-        await consumeEventStream(options, controller.signal, (event) => {
-          if (event.type === 'done') completed = true;
-          dispatch({ type: 'event', event, at: Date.now() });
-        });
+        await consumeEventStream(
+          options,
+          controller.signal,
+          (event) => {
+            count(event.type);
+            if (event.type === 'done') {
+              completed = true;
+              report(event.caseFile);
+            }
+            if (event.type === 'error' && !event.recoverable) {
+              serverFailed = true;
+            }
+            dispatch({ type: 'event', event, at: Date.now() });
+          },
+          () => count('invalid'),
+        );
 
-        if (!controller.signal.aborted && !completed) {
-          dispatch({ type: 'fail', message: '事件流意外结束' });
+        if (!controller.signal.aborted && !completed && !serverFailed) {
+          dispatch({
+            type: 'fail',
+            failure: { kind: 'stream', message: '事件流意外结束，没等到结案报告' },
+          });
         }
       } catch (error) {
         if (controller.signal.aborted) return;
-        dispatch({
-          type: 'fail',
-          message: error instanceof Error ? error.message : '立案失败',
-        });
+
+        const failure: InvestigationFailure =
+          error instanceof InvestigationHttpError
+            ? { kind: 'http', status: error.status, message: error.message }
+            : error instanceof TypeError
+              ? { kind: 'network', message: '网络连接中断，请检查网络后重试' }
+              : { kind: 'stream', message: '立案没有正常返回事件流，请重新调查' };
+
+        dispatch({ type: 'fail', failure });
       } finally {
+        report();
         if (stopRef.current === abort) stopRef.current = null;
       }
     })();

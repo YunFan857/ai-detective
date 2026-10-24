@@ -4,7 +4,13 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { toPng } from 'html-to-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComicButton } from '@/components/ui/comic-button';
-import { TIER_META, VERDICT_META, verdictLabel } from '@/lib/labels';
+import {
+  sourceSiteLabel,
+  sourceTitleLabel,
+  TIER_META,
+  VERDICT_META,
+  verdictLabel,
+} from '@/lib/labels';
 import type { Source, Tier, Verdict } from '@/types/case';
 
 /** 分享卡设计尺寸：竖版 3:4，导出 2 倍后为 2160×2880。 */
@@ -210,10 +216,13 @@ export function ShareCard({ verdict, sources, generatedAt }: ShareCardProps) {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[36px] leading-[1.2] font-black text-ink">
-                        {source.site}
+                        {sourceSiteLabel(source)}
                       </p>
-                      <p className="mt-[3px] truncate text-[36px] leading-[1.25] text-ink/70">
-                        {source.title || '暂无标题'}
+                      <p
+                        className="mt-[3px] truncate text-[36px] leading-[1.25] text-ink/70"
+                        title={sourceTitleLabel(source)}
+                      >
+                        {sourceTitleLabel(source)}
                       </p>
                     </div>
                   </li>

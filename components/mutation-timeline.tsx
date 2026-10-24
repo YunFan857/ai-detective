@@ -3,6 +3,7 @@
 import { clsx } from 'clsx';
 import { Fragment, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { formatSourceTime, sourceSiteLabel } from '@/lib/labels';
 import { stepById, stepOfTier, type StepId } from '@/lib/steps';
 import type { Source, Tier, TimelineStep } from '@/types/case';
 
@@ -36,11 +37,11 @@ type TimelinePanel = {
 type PanelSelect = (sourceId: string, stepId: StepId) => void;
 
 function yearLabel(publishedAt?: string): string {
-  return publishedAt ? publishedAt.slice(0, 4) : '年份未知';
+  return formatSourceTime(publishedAt, 'year');
 }
 
 function dateLabel(publishedAt?: string): string {
-  return publishedAt ? publishedAt.slice(0, 10) : '日期未知';
+  return formatSourceTime(publishedAt, 'day');
 }
 
 function pickPanels(steps: TimelineStep[]): TimelineStep[] {
@@ -59,7 +60,7 @@ function buildPanels(steps: TimelineStep[], sourcesById: Record<string, Source>)
 
     return {
       step,
-      site: source?.site ?? '出处待补充',
+      site: source ? sourceSiteLabel(source) : '来源不详',
       tier,
       stepId,
       color: palette.color,
@@ -264,7 +265,10 @@ function FullTimeline({ panels, onSelect }: { panels: TimelinePanel[]; onSelect:
 
               <Badge tier={panel.tier} className="self-start" />
 
-              <span className="block text-base leading-6 font-black text-ink">
+              <span
+                className="line-clamp-6 text-base leading-6 font-black text-ink"
+                title={panel.step.quote}
+              >
                 <HighlightedQuote
                   quote={panel.step.quote}
                   previous={index > 0 ? panel.previousQuote : undefined}

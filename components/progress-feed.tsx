@@ -5,7 +5,7 @@ import { clsx } from 'clsx';
 import { motion, useReducedMotion } from 'framer-motion';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { LinkIcon } from '@/components/ui/icons';
-import { DIRECTION_LABELS, verdictLabel } from '@/lib/labels';
+import { DIRECTION_LABELS, sourceSiteLabel, verdictLabel } from '@/lib/labels';
 import { STEPS, stepOfTier, type StepId } from '@/lib/steps';
 import type { InvestigationState } from '@/lib/use-investigation';
 import type { StepRevealResult } from '@/lib/use-step-reveal';
@@ -16,6 +16,8 @@ export type ProgressFeedProps = {
   sourceLabel: string;
   /** 链接立案时的文章标题，取首条来源标题兜底。 */
   sourceTitle?: string;
+  /** 图片立案时的截图缩略图（data URL）。 */
+  sourceImage?: string;
   state: InvestigationState;
   reveal: StepRevealResult;
 };
@@ -87,14 +89,15 @@ function buildGroups(state: InvestigationState): GroupedBubbles {
 
       case 'source': {
         const source = state.sourcesById[entry.source.id] ?? entry.source;
+        const site = sourceSiteLabel(source);
         const step = stepOfSourceTier(source.tier);
         const mergeKey = `${step}-${Math.floor(entry.at / 1000)}`;
         const merged = mergedSources.get(mergeKey);
 
         if (merged) {
           const sites = merged.sites ?? [];
-          if (!sites.includes(source.site)) {
-            merged.sites = [...sites, source.site];
+          if (!sites.includes(site)) {
+            merged.sites = [...sites, site];
             merged.text = `🔍 找到证人：${merged.sites.join('、')}`;
           }
         } else {
@@ -102,9 +105,9 @@ function buildGroups(state: InvestigationState): GroupedBubbles {
             id: `source-${entry.source.id}-${index}`,
             at: entry.at,
             kind: 'source',
-            text: `🔍 找到证人：${source.site}`,
+            text: `🔍 找到证人：${site}`,
             query: `元宝搜索 · ${DIRECTION_LABELS[source.direction]} · ${source.query}`,
-            sites: [source.site],
+            sites: [site],
           };
           grouped[step].push(bubble);
           mergedSources.set(mergeKey, bubble);
@@ -148,7 +151,13 @@ function buildGroups(state: InvestigationState): GroupedBubbles {
  * 左栏「办案实况」：按四个办案步骤分组播报。
  * 组头点击与底部步骤条一致；新气泡逐条弹出，播报始终不跟随疑点页签切换。
  */
-export function ProgressFeed({ sourceLabel, sourceTitle, state, reveal }: ProgressFeedProps) {
+export function ProgressFeed({
+  sourceLabel,
+  sourceTitle,
+  sourceImage,
+  state,
+  reveal,
+}: ProgressFeedProps) {
   const reduceMotion = useReducedMotion();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -183,7 +192,15 @@ export function ProgressFeed({ sourceLabel, sourceTitle, state, reveal }: Progre
 
       <div className="mx-3 mt-2 shrink-0 rounded-lg border-2 border-ink/20 bg-paper px-2.5 py-1.5 text-[11px]">
         <div className="flex items-center gap-1.5 text-muted">
-          <LinkIcon className="h-3.5 w-3.5 shrink-0" />
+          {sourceImage ? (
+            <img
+              src={sourceImage}
+              alt="截图立案原图"
+              className="h-8 w-8 shrink-0 rounded border-2 border-ink object-cover"
+            />
+          ) : (
+            <LinkIcon className="h-3.5 w-3.5 shrink-0" />
+          )}
           <span className="shrink-0">案件来源</span>
           <span aria-hidden>·</span>
           <span className="truncate font-bold text-ink">{sourceLabel}</span>
