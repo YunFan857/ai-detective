@@ -26,6 +26,9 @@
   --color-canvas: #fafffc;
   --color-highlight: #ffd84d;
 
+  /* 判决书弹出时的画布遮罩 */
+  --color-scrim: rgb(31 35 41 / 0.42);
+
   /* 旧 token 别名：与元宝色板对齐，避免历史页面出现两套配色 */
   --color-brand-deep: #00813f;
   --color-coral: #d54941;
@@ -126,6 +129,16 @@ body {
 
   .huazi-ink {
     --huazi-shadow: var(--color-ink);
+  }
+
+  /* 置信度进度条：绿色斜纹填充 */
+  .stripe-bar {
+    background-color: var(--color-brand);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgb(255 255 255 / 0.38) 0 5px,
+      transparent 5px 10px
+    );
   }
 }
 

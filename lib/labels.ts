@@ -105,6 +105,15 @@ export const VERDICT_META: Record<VerdictLevel, ToneMeta> = {
   },
 };
 
+/** 判决印章的爆炸底色，与五档判决色一一对应。 */
+export const VERDICT_STAMP_FILL: Record<VerdictLevel, string> = {
+  true: 'fill-verdict-true',
+  partly_true: 'fill-verdict-partly-true',
+  out_of_context: 'fill-verdict-out-of-context',
+  unverified: 'fill-verdict-unverified',
+  false: 'fill-verdict-false',
+};
+
 export const STAGE_META: Record<Stage, ToneMeta & { index: number }> = {
   claims: {
     index: 1,

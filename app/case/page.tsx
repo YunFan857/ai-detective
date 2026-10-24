@@ -1,10 +1,11 @@
 'use client';
 
-import { Suspense, use, useEffect, useMemo } from 'react';
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CaseHeader } from '@/components/case/case-header';
 import { EvidenceGraph } from '@/components/case/evidence-graph';
 import { ProgressFeed } from '@/components/progress-feed';
 import { StepButtons } from '@/components/step-buttons';
+import { VerdictPanel } from '@/components/verdict-panel';
 import type { StepId } from '@/lib/steps';
 import { useInvestigation, type InvestigationState } from '@/lib/use-investigation';
 import { useStepReveal, type StepIndex } from '@/lib/use-step-reveal';
@@ -69,6 +70,14 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   const { state, start } = useInvestigation();
   const reveal = useStepReveal(state);
 
+  const [verdictOpen, setVerdictOpen] = useState(false);
+  const [activeClaimId, setActiveClaimId] = useState<string | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{
+    sourceId: string;
+    nonce: number;
+  } | null>(null);
+  const autoOpenedRef = useRef(false);
+
   const mode = first(params.mode);
   const text = first(params.text)?.trim();
   const demoId = first(params.demoId);
@@ -87,12 +96,21 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     start({ mode: 'mock' });
   }, [demoId, mode, start, text]);
 
+  // 第 5 步揭示时自动弹出一次；之后由底部「结案！」按钮重新打开。
+  useEffect(() => {
+    if (!state.verdict || reveal.revealedStep < 5) return;
+    if (autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    setVerdictOpen(true);
+  }, [reveal.revealedStep, state.verdict]);
+
   const activeStep = toStepId(reveal.viewStep);
   const closed = state.status === 'done';
   const input = state.input || text || '';
   const modeLabel = MODE_LABELS[mode ?? 'mock'] ?? '文字立案';
 
-  const claim = state.claims[0] ?? null;
+  const claim =
+    state.claims.find((item) => item.id === activeClaimId) ?? state.claims[0] ?? null;
   const claimSources = useMemo(() => {
     if (!claim) return [];
     return state.sourceOrder
@@ -104,6 +122,35 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     [claim, state.groups],
   );
   const revealStep = (step: StepIndex): StepId | 0 => (step === 0 ? 0 : toStepId(step));
+
+  /** 判决书里展示的第一条非空时间线。 */
+  const verdictTimeline = useMemo(() => {
+    for (const item of state.claims) {
+      const steps = state.timelines[item.id];
+      if (steps && steps.length > 0) return steps;
+    }
+    return [];
+  }, [state.claims, state.timelines]);
+
+  const handleSelectSource = useCallback(
+    (sourceId: string, stepId: StepId) => {
+      setVerdictOpen(false);
+
+      const source = state.sourcesById[sourceId];
+      if (source && source.claimId !== claim?.id) {
+        setActiveClaimId(source.claimId);
+      }
+
+      reveal.setViewStep(stepId);
+      setFocusRequest((previous) => ({
+        sourceId,
+        nonce: (previous?.nonce ?? 0) + 1,
+      }));
+    },
+    [claim?.id, reveal, state.sourcesById],
+  );
+
+  const handleCloseVerdict = useCallback(() => setVerdictOpen(false), []);
 
   return (
     <main className="flex h-dvh min-h-[720px] min-w-[1280px] flex-col overflow-hidden bg-paper text-ink">
@@ -131,12 +178,25 @@ function CaseContent({ searchParams }: CaseSearchParams) {
           timeline={claim ? state.timelines[claim.id] : undefined}
           revealedStep={revealStep(reveal.revealedStep)}
           viewStep={revealStep(reveal.viewStep)}
+          focusSourceId={focusRequest?.sourceId ?? null}
+          focusNonce={focusRequest?.nonce}
         />
       </div>
 
       <div className="shrink-0 px-3 pb-3">
-        <StepButtons reveal={reveal} />
+        <StepButtons reveal={reveal} onOpenVerdict={() => setVerdictOpen(true)} />
       </div>
+
+      <VerdictPanel
+        open={verdictOpen}
+        verdict={state.verdict}
+        claims={state.claims}
+        sourcesById={state.sourcesById}
+        sourceOrder={state.sourceOrder}
+        timeline={verdictTimeline}
+        onClose={handleCloseVerdict}
+        onSelectSource={handleSelectSource}
+      />
     </main>
   );
 }

@@ -38,6 +38,10 @@ export type EvidenceGraphProps = {
   revealedStep: StepId | 0;
   /** 画布当前查看第几步。 */
   viewStep: StepId | 0;
+  /** 判决书里点击引用后要定位的来源 id。 */
+  focusSourceId?: string | null;
+  /** 同一来源被重复点击时递增，用来重新居中。 */
+  focusNonce?: number;
 };
 
 type ClaimNodeData = {
@@ -54,6 +58,7 @@ type SourceNodeData = {
   step: StepId;
   isCurrent: boolean;
   isNew: boolean;
+  isFocused: boolean;
   sourceId: string;
   site: string;
   date: string;
@@ -66,6 +71,7 @@ type GroupNodeData = {
   step: StepId;
   isCurrent: boolean;
   isNew: boolean;
+  isFocused: boolean;
   groupId: string;
   count: number;
   memberSites: string;
@@ -448,6 +454,7 @@ function SourceCard({ data }: { data: SourceNodeData }) {
       <div
         className={clsx(
           'relative w-[190px] rounded-xl border-ink px-3 py-2.5',
+          data.isFocused && 'outline outline-[6px] outline-offset-2 outline-highlight',
           data.isCurrent ? 'border-4 shadow-ink' : 'border-2 bg-card shadow-ink-sm',
         )}
         style={data.isCurrent ? { backgroundColor: step.soft } : undefined}
@@ -499,6 +506,7 @@ function GroupCard({ data }: { data: GroupNodeData }) {
         <div
           className={clsx(
             'relative rounded-xl border-ink px-3 py-2.5',
+            data.isFocused && 'outline outline-[6px] outline-offset-2 outline-highlight',
             data.isCurrent ? 'border-4 shadow-ink' : 'border-2 bg-card shadow-ink-sm',
           )}
           style={data.isCurrent ? { backgroundColor: step.soft } : undefined}
@@ -742,10 +750,13 @@ function EvidenceGraphInner({
   timeline,
   revealedStep,
   viewStep,
+  focusSourceId,
+  focusNonce,
 }: EvidenceGraphProps) {
   const flow = useReactFlow<GraphNode, GraphEdge>();
   const reduced = useReducedMotion();
   const hasFitRef = useRef(false);
+  const handledFocusRef = useRef<number | null>(null);
   const [flowReady, setFlowReady] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   // 「已出现」记录放在 state 里的可变集合：渲染时只读，effect 里登记，避免渲染期改 ref。
@@ -759,6 +770,25 @@ function EvidenceGraphInner({
   const claimMeta = useMemo(() => (claim ? claimMetaOf(sources) : ''), [claim, sources]);
   // 坐标由 sources 的到达顺序一次性确定，此后不再变化。
   const positions = useMemo(() => computePositions(sources, entities), [sources, entities]);
+
+  /** 引用来源可能被折叠进同源组卡片，定位时统一换算成画面实体。 */
+  const focusEntityId = useMemo(() => {
+    if (!focusSourceId) return null;
+
+    for (const entity of entities) {
+      if (entity.kind === 'source' && entity.source.id === focusSourceId) return entity.id;
+
+      if (
+        entity.kind === 'group' &&
+        entity.group.originSourceId !== focusSourceId &&
+        entity.group.memberIds.includes(focusSourceId)
+      ) {
+        return entity.id;
+      }
+    }
+
+    return null;
+  }, [entities, focusSourceId]);
 
   const visibleEntities = entities.filter((entity) => entity.step <= viewStep);
 
@@ -799,6 +829,7 @@ function EvidenceGraphInner({
           step: entity.step,
           isCurrent,
           isNew,
+          isFocused: entity.id === focusEntityId,
           sourceId: entity.source.id,
           site: entity.source.site,
           date: formatMonth(entity.source.publishedAt),
@@ -820,6 +851,7 @@ function EvidenceGraphInner({
         step: entity.step,
         isCurrent,
         isNew,
+        isFocused: entity.id === focusEntityId,
         groupId: entity.group.id,
         count: entity.count,
         memberSites: entity.memberSites,
@@ -853,8 +885,25 @@ function EvidenceGraphInner({
   useEffect(() => {
     if (!flowReady || hasFitRef.current) return;
     hasFitRef.current = true;
+    // 从判决书跳转进来时直接把镜头交给节点定位，避免先全图再跳。
+    if (focusEntityId) return;
     void flow.fitBounds(LAYOUT_BOUNDS, { padding: 0.08, duration: reduced ? 0 : 260 });
-  }, [flow, flowReady, reduced]);
+  }, [flow, flowReady, reduced, focusEntityId]);
+
+  // 判决书引用 → 画布定位：居中到目标节点，并保留荧光描边。
+  useEffect(() => {
+    if (!flowReady || !focusEntityId || focusNonce === undefined) return;
+    if (handledFocusRef.current === focusNonce) return;
+    handledFocusRef.current = focusNonce;
+
+    const position = positions.get(focusEntityId);
+    if (!position) return;
+
+    void flow.setCenter(position.x + CARD_WIDTH / 2, position.y + CARD_HEIGHT / 2, {
+      zoom: 1.15,
+      duration: reduced ? 0 : 420,
+    });
+  }, [flow, flowReady, focusEntityId, focusNonce, positions, reduced]);
 
   const nextStep = (revealedStep > 0 ? Math.min(revealedStep + 1, 4) : 1) as StepId;
   const showNext =
