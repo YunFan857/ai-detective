@@ -17,21 +17,21 @@ type DemoCase = {
 const DEMO_CASES: DemoCase[] = [
   {
     id: 'demo-1',
-    title: '咖啡致癌？',
-    input: '“世卫专家证实喝咖啡会致癌”',
-    verdict: 'out_of_context',
+    title: '香蕉有辐射？',
+    input: '“香蕉含有放射性物质，吃香蕉会摄入微量辐射”',
+    verdict: 'true',
   },
   {
     id: 'demo-2',
-    title: '自来水管含毒',
-    input: '“紧急通知！今晚的水别喝…”',
-    verdict: 'false',
+    title: '咖啡致癌？',
+    input: '“喝咖啡会致癌，世卫组织专家已证实”',
+    verdict: 'out_of_context',
   },
   {
     id: 'demo-3',
-    title: '秦陵水银',
-    input: '“秦始皇陵里有大量水银”',
-    verdict: 'true',
+    title: '小龙虾是尸食？',
+    input: '“小龙虾是日本人用来处理尸体的，千万别吃”',
+    verdict: 'false',
   },
 ];
 
