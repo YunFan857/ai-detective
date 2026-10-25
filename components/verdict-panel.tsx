@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useAnimation, useReducedMotion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DetectiveAnimation } from '@/components/case/detective-animation';
 import { MutationTimeline } from '@/components/mutation-timeline';
 import { ComicButton } from '@/components/ui/comic-button';
 import { VerdictBadge } from '@/components/ui/verdict-badge';
@@ -455,6 +456,11 @@ function VerdictDialog({
           </footer>
         </motion.div>
       </motion.section>
+
+      {/* 递报告：判决书出现后站在卡片右侧，播完停在末帧；每次打开报告重播一次。 */}
+      <div className="pointer-events-none absolute top-1/2 left-[calc(50%+352px)] z-20 hidden -translate-y-1/2 xl:block">
+        <DetectiveAnimation clip="report" size={200} playKey={verdict.headline} />
+      </div>
     </motion.div>
   );
 }

@@ -2,11 +2,15 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { DetectiveAnimation } from '@/components/case/detective-animation';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { HomeIcon, LinkIcon } from '@/components/ui/icons';
 import { StatsBar } from '@/components/stats-bar';
 import { stepById, type StepId } from '@/lib/steps';
 import type { InvestigationState } from '@/lib/use-investigation';
+
+/** 上一轮已经敬礼过的办案轮次：返回首页再进来、组件重挂载都不重复播放。 */
+let lastSalutedRun: number | null = null;
 
 export type CaseHeaderProps = {
   caseId: string | null;
@@ -35,6 +39,16 @@ export function CaseHeader({
   const step = stepById(activeStep);
   const [terminateConfirm, setTerminateConfirm] = useState(false);
   const running = state.status === 'running';
+  /** 本轮办案的敬礼状态：case 事件到达（startedAt）后播一次，播完恢复头像。 */
+  const [salutedRun, setSalutedRun] = useState<number | null>(lastSalutedRun);
+  const runKey = running ? state.startedAt : null;
+  const salutePlaying = runKey !== null && runKey !== salutedRun;
+
+  const finishSalute = (): void => {
+    if (runKey === null) return;
+    lastSalutedRun = runKey;
+    setSalutedRun(runKey);
+  };
 
   return (
     <header className="flex h-[64px] shrink-0 items-center gap-3 border-b-[3px] border-ink bg-brand px-4">
@@ -44,7 +58,17 @@ export function CaseHeader({
         title="返回首页"
         className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-card"
       >
-        <DetectiveMascot variant="avatar" className="h-11 w-11 -translate-y-1" />
+        {salutePlaying ? (
+          <DetectiveAnimation
+            clip="salute"
+            playKey={runKey}
+            size={40}
+            onEnded={finishSalute}
+            onUnavailable={finishSalute}
+          />
+        ) : (
+          <DetectiveMascot variant="avatar" className="h-11 w-11 -translate-y-1" />
+        )}
       </Link>
 
       <Link

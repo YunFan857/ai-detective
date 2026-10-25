@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { clsx } from 'clsx';
 import { motion, useReducedMotion } from 'framer-motion';
+import { DetectiveAnimation } from '@/components/case/detective-animation';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { LinkIcon } from '@/components/ui/icons';
 import { billingSettlementText } from '@/lib/credits-format';
@@ -150,6 +151,20 @@ function buildGroups(state: InvestigationState): GroupedBubbles {
   return grouped;
 }
 
+/** 搜索、查证、合并信源期间：跑步动画只在这几段出现。 */
+function isProcessing(state: InvestigationState): boolean {
+  if (state.status !== 'running') return false;
+  for (let index = state.feed.length - 1; index >= 0; index -= 1) {
+    const entry = state.feed[index];
+    if (entry.type !== 'stage') continue;
+    return (
+      entry.status === 'start' &&
+      (entry.stage === 'search' || entry.stage === 'grade' || entry.stage === 'cluster')
+    );
+  }
+  return false;
+}
+
 /**
  * 左栏「办案实况」：按四个办案步骤分组播报。
  * 组头点击与底部步骤条一致；新气泡逐条弹出，播报始终不跟随疑点页签切换。
@@ -173,6 +188,23 @@ export function ProgressFeed({
 
   const startedAt = state.startedAt ?? state.feed[0]?.at ?? null;
   const clock = (at: number) => formatClock(at - (startedAt ?? at));
+
+  /** 搜索 / 查证 / 合并信源期间（以最后一条 stage 事件为准）才让侦探跑起来。 */
+  const processing = isProcessing(state);
+  /** 最新一条播报：跑步动画只跟这一条，同一时刻只有一处。 */
+  const latest = useMemo(() => {
+    let found: { step: StepId; id: string; at: number } | null = null;
+    for (const step of STEPS) {
+      const bubbles = grouped[step.id];
+      const last = bubbles[bubbles.length - 1];
+      if (!last) continue;
+      if (!found || last.at >= found.at) found = { step: step.id, id: last.id, at: last.at };
+    }
+    return found;
+  }, [grouped]);
+  /** 最新条目已揭示时动画跟在气泡旁；还没揭示时先挂在所在步骤的标题上。 */
+  const anchorVisible = latest !== null && reveal.revealedStep >= latest.step;
+  const runKey = `${state.startedAt ?? state.feed[0]?.at ?? 0}-${latest?.step ?? 0}`;
 
   // 新播报到达后自动滚到底部；尊重减少动态偏好。
   useEffect(() => {
@@ -282,7 +314,15 @@ export function ProgressFeed({
                 >
                   {STEP_INDEX[step.id - 1]} {step.name}
                 </span>
-                {running ? (
+                {processing && latest?.step === step.id && !anchorVisible ? (
+                  <DetectiveAnimation
+                    clip="running"
+                    loop
+                    playKey={runKey}
+                    size={56}
+                    className="ml-auto"
+                  />
+                ) : running ? (
                   <span className="text-[10px] font-bold whitespace-nowrap text-muted">
                     · 进行中…
                   </span>
@@ -291,42 +331,61 @@ export function ProgressFeed({
 
               {revealed ? (
                 <div className="mt-2 ml-1.5 space-y-2 pl-1">
-                  {bubbles.map((bubble) => (
-                    <motion.div
-                      key={bubble.id}
-                      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
-                      animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-                      transition={{ duration: reduceMotion ? 0.15 : 0.22, ease: 'easeOut' }}
-                      className="flex items-start gap-1.5"
-                    >
-                      <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft">
-                        <DetectiveMascot variant="avatar" className="h-7 w-7 -translate-y-0.5" />
-                      </span>
-
-                      <div
-                        className={clsx(
-                          'min-w-0 flex-1 rounded-xl border-2 px-2 py-1.5 text-[11px] leading-4 font-bold shadow-ink-sm',
-                          bubble.kind === 'error'
-                            ? 'border-orange bg-orange-soft text-orange'
-                            : bubble.kind === 'groups'
-                              ? 'border-ink bg-beige text-ink'
-                              : 'border-ink bg-card text-ink',
-                        )}
+                  {bubbles.map((bubble) => {
+                    const isAnchor = processing && latest?.id === bubble.id;
+                    return (
+                      <motion.div
+                        key={bubble.id}
+                        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                        animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+                        transition={{ duration: reduceMotion ? 0.15 : 0.22, ease: 'easeOut' }}
+                        className="relative flex items-start gap-1.5"
                       >
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className="rounded-full border border-ink bg-brand px-1.5 py-0.5 text-[9px] leading-none font-black tracking-wide text-white">
-                            {clock(bubble.at)}
-                          </span>
-                          {bubble.query ? (
-                            <span className="max-w-full truncate rounded border border-brand bg-brand-soft px-1 py-0.5 text-[9px] leading-none font-black text-brand-dark">
-                              {bubble.query}
+                        <span
+                          className={clsx(
+                            'mt-0.5 grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft',
+                            isAnchor && 'invisible',
+                          )}
+                        >
+                          <DetectiveMascot variant="avatar" className="h-7 w-7 -translate-y-0.5" />
+                        </span>
+
+                        <div
+                          className={clsx(
+                            'min-w-0 flex-1 rounded-xl border-2 px-2 py-1.5 text-[11px] leading-4 font-bold shadow-ink-sm',
+                            bubble.kind === 'error'
+                              ? 'border-orange bg-orange-soft text-orange'
+                              : bubble.kind === 'groups'
+                                ? 'border-ink bg-beige text-ink'
+                                : 'border-ink bg-card text-ink',
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="rounded-full border border-ink bg-brand px-1.5 py-0.5 text-[9px] leading-none font-black tracking-wide text-white">
+                              {clock(bubble.at)}
                             </span>
-                          ) : null}
+                            {bubble.query ? (
+                              <span className="max-w-full truncate rounded border border-brand bg-brand-soft px-1 py-0.5 text-[9px] leading-none font-black text-brand-dark">
+                                {bubble.query}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 break-words">{bubble.text}</p>
                         </div>
-                        <p className="mt-1 break-words">{bubble.text}</p>
-                      </div>
-                    </motion.div>
-                  ))}
+
+                        {/* 最新处理中条目旁循环播放；只挂在这一条上，避免满屏都在跑。 */}
+                        {isAnchor ? (
+                          <DetectiveAnimation
+                            clip="running"
+                            loop
+                            playKey={runKey}
+                            size={56}
+                            className="absolute top-1/2 left-2 -translate-x-1/2 -translate-y-1/2"
+                          />
+                        ) : null}
+                      </motion.div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="mt-2 ml-1.5 space-y-2 pl-1" aria-hidden>
