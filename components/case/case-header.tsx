@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { HomeIcon, LinkIcon } from '@/components/ui/icons';
@@ -12,6 +15,10 @@ export type CaseHeaderProps = {
   state: InvestigationState;
   activeStep: StepId;
   closed: boolean;
+  /** 本次办案已被用户主动终止。 */
+  terminated?: boolean;
+  /** 办案进行中时顶部「终止办案」的回调。 */
+  onTerminate?: () => void;
 };
 
 /** 卷宗页顶部绿栏：卷宗号、立案方式、原始消息、统计与当前步骤。 */
@@ -22,8 +29,12 @@ export function CaseHeader({
   state,
   activeStep,
   closed,
+  terminated = false,
+  onTerminate,
 }: CaseHeaderProps) {
   const step = stepById(activeStep);
+  const [terminateConfirm, setTerminateConfirm] = useState(false);
+  const running = state.status === 'running';
 
   return (
     <header className="flex h-[64px] shrink-0 items-center gap-3 border-b-[3px] border-ink bg-brand px-4">
@@ -63,28 +74,66 @@ export function CaseHeader({
 
       <StatsBar state={state} />
 
-      <span
-        aria-live="polite"
-        className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 border-ink px-3 py-1.5 text-sm font-black whitespace-nowrap text-ink shadow-ink-sm ${
-          closed ? 'bg-beige' : 'bg-card'
-        }`}
-      >
-        {closed ? (
-          <>
-            <span aria-hidden>📜</span>
-            已结案
-          </>
+      {running && onTerminate ? (
+        terminateConfirm ? (
+          <span className="flex shrink-0 items-center gap-1 rounded-full border-2 border-ink bg-coral-soft px-1.5 py-1 text-[11px] font-black whitespace-nowrap text-coral">
+            终止后积分退回
+            <button
+              type="button"
+              onClick={() => setTerminateConfirm(false)}
+              className="rounded-full border border-ink bg-card px-2 py-0.5 text-[10px] font-black text-ink"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={onTerminate}
+              className="rounded-full border border-ink bg-coral px-2 py-0.5 text-[10px] font-black text-white"
+            >
+              确认终止
+            </button>
+          </span>
         ) : (
-          <>
-            <i
-              className="h-2.5 w-2.5 rounded-full border border-ink"
-              style={{ backgroundColor: step.color }}
-              aria-hidden
-            />
-            第 {activeStep} 步 · {step.name}
-          </>
-        )}
-      </span>
+          <button
+            type="button"
+            onClick={() => setTerminateConfirm(true)}
+            className="flex shrink-0 items-center gap-1 rounded-full border-2 border-ink bg-card px-2.5 py-1.5 text-xs font-black whitespace-nowrap text-coral shadow-ink-sm transition-transform hover:-translate-y-0.5 active:translate-y-0"
+          >
+            <span aria-hidden>■</span>
+            终止办案
+          </button>
+        )
+      ) : null}
+
+      {terminated ? (
+        <span className="flex shrink-0 items-center gap-1.5 rounded-full border-2 border-ink bg-coral-soft px-3 py-1.5 text-sm font-black whitespace-nowrap text-coral shadow-ink-sm">
+          <span aria-hidden>■</span>
+          已终止
+        </span>
+      ) : (
+        <span
+          aria-live="polite"
+          className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 border-ink px-3 py-1.5 text-sm font-black whitespace-nowrap text-ink shadow-ink-sm ${
+            closed ? 'bg-beige' : 'bg-card'
+          }`}
+        >
+          {closed ? (
+            <>
+              <span aria-hidden>📜</span>
+              已结案
+            </>
+          ) : (
+            <>
+              <i
+                className="h-2.5 w-2.5 rounded-full border border-ink"
+                style={{ backgroundColor: step.color }}
+                aria-hidden
+              />
+              第 {activeStep} 步 · {step.name}
+            </>
+          )}
+        </span>
+      )}
     </header>
   );
 }

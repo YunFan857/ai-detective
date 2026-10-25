@@ -20,6 +20,7 @@ import {
   toggleClaimId,
 } from '@/lib/claims-selection';
 import { releaseCredits, reserveCredits } from '@/lib/credits-store';
+import { resetCaseSession } from '@/lib/use-investigation';
 import { ClaimsPreviewSchema, type ClaimsPreview } from '@/types/case';
 
 /** 预检是一次性 JSON 请求，超时后明确失败，不靠轮询或假进度。 */
@@ -398,6 +399,7 @@ export function useClaimsCheck(): ClaimsCheckController {
       return;
     }
 
+    resetCaseSession();
     router.push('/case?flow=scriptcheck');
   }, [preview, router, selectedIds]);
 

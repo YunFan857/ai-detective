@@ -16,6 +16,11 @@ import {
 } from '@/lib/claims-intake';
 import { SpeechBubble } from '@/components/ui/speech-bubble';
 import {
+  resetCaseSession,
+  terminateActiveCase,
+  useActiveCase,
+} from '@/lib/use-investigation';
+import {
   CameraIcon,
   LinkIcon,
   MicIcon,
@@ -104,6 +109,7 @@ async function compressImage(file: File): Promise<string> {
 export function HomeInputCard() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const activeCase = useActiveCase();
   const noticeCode = searchParams.get('notice');
   const notice = noticeCode ? HOME_NOTICES[noticeCode] : undefined;
   const intakeParam = searchParams.get('intake');
@@ -128,8 +134,18 @@ export function HomeInputCard() {
   } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [terminateConfirm, setTerminateConfirm] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 首页被路由缓存隐藏后返回时，清掉上一次跳转遗留的加载态与终止确认；
+  // 正在进行的办案由顶部「正在立案」接管，不会一直卡在禁用的按钮上。
+  useEffect(() => {
+    return () => {
+      setSubmitting(false);
+      setTerminateConfirm(false);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -229,6 +245,7 @@ export function HomeInputCard() {
       try {
         const dataUrl = await compressImage(file.raw);
         sessionStorage.setItem(IMAGE_STORAGE_KEY, dataUrl);
+        resetCaseSession();
         router.push('/case?mode=real&input=image');
       } catch (error) {
         setFileError(
@@ -279,6 +296,7 @@ export function HomeInputCard() {
       }
 
       const target = `/case?mode=${isMock ? 'mock' : 'real'}&text=${encodeURIComponent(trimmedText)}`;
+      if (!isMock) resetCaseSession();
       router.push(target);
       return;
     }
@@ -580,7 +598,7 @@ export function HomeInputCard() {
 
         {/* 提示 + 立案 */}
         <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-          {mode === 'text' ? (
+          {!activeCase && mode === 'text' ? (
             textHint ? (
               <p
                 role="status"
@@ -604,12 +622,12 @@ export function HomeInputCard() {
               </p>
             )
           ) : null}
-          {!scriptcheck && mode === 'text' && !textHint ? (
+          {!activeCase && !scriptcheck && mode === 'text' && !textHint ? (
             <p className="mr-auto w-full text-[11px] font-bold text-muted sm:w-auto">
               消息查证自动预占最多 {FACTCHECK_RESERVE_CLAIMS} 个疑点的积分，结案按实际退回差额。
             </p>
           ) : null}
-          {mode === 'link' ? (
+          {!activeCase && mode === 'link' ? (
             <p className="mr-auto text-xs text-muted">
               公众号、新闻站都行；抖音 / 小红书打不开时建议复制文字
             </p>
@@ -629,21 +647,72 @@ export function HomeInputCard() {
             </p>
           ) : null}
 
-          <button
-            type="button"
-            disabled={!canSubmit || submitting}
-            onClick={handleSubmit}
-            className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand px-6 py-2.5 text-base font-black text-white shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:border-gray disabled:bg-gray-soft disabled:text-gray disabled:shadow-none"
-          >
-            <span aria-hidden>{submitting ? '⏳' : scriptcheck ? '🔍' : '🕵️'}</span>
-            {submitting
-              ? mode === 'image'
-                ? '正在整理截图…'
-                : '正在立案…'
-              : scriptcheck
-                ? '免费找疑点'
-                : '立案调查'}
-          </button>
+          {activeCase ? (
+            terminateConfirm ? (
+              <>
+                <p className="mr-auto flex items-center gap-1.5 text-xs font-black text-coral">
+                  ⚠️ 终止后本次查证立即停止，已预占的积分会退回。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setTerminateConfirm(false)}
+                  className="rounded-full border-2 border-ink bg-card px-4 py-2 text-sm font-black text-ink shadow-ink-sm transition-transform hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  再想想
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTerminateConfirm(false);
+                    terminateActiveCase();
+                  }}
+                  className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-coral px-4 py-2 text-sm font-black text-white shadow-ink-sm transition-transform hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <span aria-hidden>■</span>
+                  确认终止
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="mr-auto max-w-[280px] truncate text-xs font-bold text-muted">
+                  🕵️ {activeCase.label}
+                  {activeCase.input ? `「${activeCase.input}」` : ''}还在办案中，进度不会丢
+                </p>
+                <button
+                  type="button"
+                  onClick={() => router.push(activeCase.href)}
+                  className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand px-5 py-2.5 text-base font-black text-white shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <span aria-hidden>⏳</span>
+                  正在立案…
+                  <span className="text-xs">· 回到办案页 →</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTerminateConfirm(true)}
+                  className="rounded-full border-2 border-ink bg-card px-4 py-2 text-sm font-black text-coral shadow-ink-sm transition-transform hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  终止办案
+                </button>
+              </>
+            )
+          ) : (
+            <button
+              type="button"
+              disabled={!canSubmit || submitting}
+              onClick={handleSubmit}
+              className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand px-6 py-2.5 text-base font-black text-white shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:border-gray disabled:bg-gray-soft disabled:text-gray disabled:shadow-none"
+            >
+              <span aria-hidden>{submitting ? '⏳' : scriptcheck ? '🔍' : '🕵️'}</span>
+              {submitting
+                ? mode === 'image'
+                  ? '正在整理截图…'
+                  : '正在立案…'
+                : scriptcheck
+                  ? '免费找疑点'
+                  : '立案调查'}
+            </button>
+          )}
         </div>
       </div>
     </section>

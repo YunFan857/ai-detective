@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useSyncExternalStore } from 'react';
 import { z } from 'zod';
 import demoEventsJson from '@/mock/events-demo.json';
 import { playEvents, type PlayableEvent } from '@/lib/mock-stream';
@@ -102,8 +102,23 @@ export type StartOptions =
 
 export type InvestigationController = {
   state: InvestigationState;
-  start: (options: StartOptions) => void;
+  start: (options: StartOptions, session?: ActiveCaseSession) => void;
   stop: () => void;
+};
+
+/**
+ * 正在运行的办案页：首页据此展示「正在立案」入口，并可一键终止。
+ * 只登记真实查证；mock / 演示回放不产生会话，避免首页出现误导入口。
+ */
+export type ActiveCaseSession = {
+  /** 办案页地址，首页点击后直接回到该页继续看进度。 */
+  href: string;
+  /** 原始消息，用于首页提示。 */
+  input: string;
+  /** 立案方式中文名，如「文字立案」。 */
+  label: string;
+  /** 首页终止办案时调用：退回预占积分等收尾。 */
+  onTerminate?: () => void;
 };
 
 const INITIAL_STATE: InvestigationState = {
@@ -133,12 +148,6 @@ const INITIAL_STATE: InvestigationState = {
 const DEMO_EVENTS: PlayableEvent[] = z
   .array(CaseEventSchema.and(z.object({ delayMs: z.number().optional() })))
   .parse(demoEventsJson);
-
-type Action =
-  | { type: 'start'; inputImage?: string }
-  | { type: 'stop' }
-  | { type: 'fail'; failure: InvestigationFailure }
-  | { type: 'event'; event: CaseEvent; at: number };
 
 function applyEvent(state: InvestigationState, event: CaseEvent, at: number): InvestigationState {
   switch (event.type) {
@@ -273,29 +282,73 @@ function applyEvent(state: InvestigationState, event: CaseEvent, at: number): In
   return state;
 }
 
-function investigationReducer(state: InvestigationState, action: Action): InvestigationState {
-  switch (action.type) {
-    case 'start':
-      return {
-        ...INITIAL_STATE,
-        status: 'running',
-        inputImage: action.inputImage ?? null,
-      };
+/**
+ * 调查状态放在模块级单例：办案页被缓存/隐藏或返回首页时事件流不中断，
+ * 首页也能实时读到「正在办案」并随时终止。
+ */
+type InvestigationStore = {
+  state: InvestigationState;
+  /** 正在运行的办案会话；结案、失败、终止后清空。 */
+  session: ActiveCaseSession | null;
+  /** 被终止的办案页地址：回到该页时不自动重开同一案。 */
+  terminatedHref: string | null;
+};
 
-    case 'stop':
-      return state.status === 'running' ? { ...state, status: 'idle' } : state;
+const SERVER_SNAPSHOT: InvestigationStore = {
+  state: INITIAL_STATE,
+  session: null,
+  terminatedHref: null,
+};
 
-    case 'fail':
-      return {
-        ...state,
-        status: 'error',
-        errors: [...state.errors, action.failure.message],
-        failure: action.failure,
-      };
+let store: InvestigationStore = SERVER_SNAPSHOT;
+const listeners = new Set<() => void>();
+/** 当前事件流的取消函数；同一时刻只允许一个调查在跑。 */
+let cancelCurrent: (() => void) | null = null;
 
-    case 'event':
-      return applyEvent(state, action.event, action.at);
-  }
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getSnapshot(): InvestigationStore {
+  return store;
+}
+
+function getServerSnapshot(): InvestigationStore {
+  return SERVER_SNAPSHOT;
+}
+
+function publish(next: InvestigationStore): void {
+  store = next;
+  for (const listener of listeners) listener();
+}
+
+/** 结案 / 失败后办案会话结束，首页的「正在立案」入口随之消失。 */
+function liveSession(
+  state: InvestigationState,
+  session: ActiveCaseSession | null,
+): ActiveCaseSession | null {
+  return state.status === 'done' || state.status === 'error' ? null : session;
+}
+
+function dispatchEvent(event: CaseEvent, at: number): void {
+  const state = applyEvent(store.state, event, at);
+  publish({ ...store, state, session: liveSession(state, store.session) });
+}
+
+function fail(failure: InvestigationFailure): void {
+  publish({
+    ...store,
+    state: {
+      ...store.state,
+      status: 'error',
+      errors: [...store.state.errors, failure.message],
+      failure,
+    },
+    session: null,
+  });
 }
 
 type StreamOptions = Exclude<StartOptions, { mode: 'mock' }>;
@@ -536,109 +589,150 @@ async function consumeEventStream(
 }
 
 /**
- * 调查事件流订阅 Hook：mock 回放与真实接口共用同一套 reducer。
- * 组件卸载或调用 stop() 时中止正在播放/请求的事件流。
+ * 开一个新案：mock 回放与真实接口共用同一套事件累积。
+ * session 只在真实查证时传入，首页据此展示「正在立案」并可终止。
  */
-export function useInvestigation(): InvestigationController {
-  const [state, dispatch] = useReducer(investigationReducer, INITIAL_STATE);
-  const stopRef = useRef<(() => void) | null>(null);
+function startInvestigation(options: StartOptions, session?: ActiveCaseSession): void {
+  cancelCurrent?.();
+  cancelCurrent = null;
 
-  const stop = useCallback(() => {
-    stopRef.current?.();
-    stopRef.current = null;
-    dispatch({ type: 'stop' });
-  }, []);
-
-  const start = useCallback((options: StartOptions) => {
-    stopRef.current?.();
-    stopRef.current = null;
-
-    const isPreviewFlow = 'flow' in options && options.flow === 'preview';
-    dispatch({
-      type: 'start',
+  const isPreviewFlow = 'flow' in options && options.flow === 'preview';
+  publish({
+    state: {
+      ...INITIAL_STATE,
+      status: 'running',
       inputImage:
         !isPreviewFlow && options.mode === 'real' && options.inputType === 'image'
           ? options.image
-          : undefined,
-    });
+          : null,
+    },
+    session: session ?? null,
+    terminatedHref: null,
+  });
 
-    if (!isPreviewFlow && options.mode === 'mock') {
-      const cancel = playEvents(
-        DEMO_EVENTS,
-        (event) => dispatch({ type: 'event', event, at: Date.now() }),
-        options.speed ?? 1,
-      );
-      stopRef.current = cancel;
-      return;
-    }
+  if (!isPreviewFlow && options.mode === 'mock') {
+    cancelCurrent = playEvents(
+      DEMO_EVENTS,
+      (event) => dispatchEvent(event, Date.now()),
+      options.speed ?? 1,
+    );
+    return;
+  }
 
-    const controller = new AbortController();
-    const abort = () => controller.abort();
-    stopRef.current = abort;
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  cancelCurrent = abort;
 
-    void (async () => {
-      let completed = false;
-      let reported = false;
-      /** 服务端已经推送不可恢复的错误，流随后关闭时不再重复判成「意外结束」。 */
-      let serverFailed = false;
-      const counts = new Map<string, number>();
-      const count = (type: string): void => {
-        counts.set(type, (counts.get(type) ?? 0) + 1);
-      };
-      const report = (caseFile?: CaseFile): void => {
-        if (reported) return;
-        reported = true;
-        reportDiagnostics(counts, caseFile);
-      };
-
-      try {
-        await consumeEventStream(
-          options,
-          controller.signal,
-          (event) => {
-            count(event.type);
-            if (event.type === 'done') {
-              completed = true;
-              report(event.caseFile);
-            }
-            if (event.type === 'error' && !event.recoverable) {
-              serverFailed = true;
-            }
-            dispatch({ type: 'event', event, at: Date.now() });
-          },
-          () => count('invalid'),
-        );
-
-        if (!controller.signal.aborted && !completed && !serverFailed) {
-          dispatch({
-            type: 'fail',
-            failure: { kind: 'stream', message: '事件流意外结束，没等到结案报告' },
-          });
-        }
-      } catch (error) {
-        if (controller.signal.aborted) return;
-
-        const failure: InvestigationFailure =
-          error instanceof InvestigationHttpError
-            ? { kind: 'http', status: error.status, message: error.message }
-            : error instanceof TypeError
-              ? { kind: 'network', message: '网络连接中断，请检查网络后重试' }
-              : { kind: 'stream', message: '立案没有正常返回事件流，请重新调查' };
-
-        dispatch({ type: 'fail', failure });
-      } finally {
-        report();
-        if (stopRef.current === abort) stopRef.current = null;
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      stopRef.current?.();
-      stopRef.current = null;
+  void (async () => {
+    let completed = false;
+    let reported = false;
+    /** 服务端已经推送不可恢复的错误，流随后关闭时不再重复判成「意外结束」。 */
+    let serverFailed = false;
+    const counts = new Map<string, number>();
+    const count = (type: string): void => {
+      counts.set(type, (counts.get(type) ?? 0) + 1);
     };
-  }, []);
+    const report = (caseFile?: CaseFile): void => {
+      if (reported) return;
+      reported = true;
+      reportDiagnostics(counts, caseFile);
+    };
 
-  return { state, start, stop };
+    try {
+      await consumeEventStream(
+        options,
+        controller.signal,
+        (event) => {
+          count(event.type);
+          if (event.type === 'done') {
+            completed = true;
+            report(event.caseFile);
+          }
+          if (event.type === 'error' && !event.recoverable) {
+            serverFailed = true;
+          }
+          dispatchEvent(event, Date.now());
+        },
+        () => count('invalid'),
+      );
+
+      if (!controller.signal.aborted && !completed && !serverFailed) {
+        fail({ kind: 'stream', message: '事件流意外结束，没等到结案报告' });
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+
+      const failure: InvestigationFailure =
+        error instanceof InvestigationHttpError
+          ? { kind: 'http', status: error.status, message: error.message }
+          : error instanceof TypeError
+            ? { kind: 'network', message: '网络连接中断，请检查网络后重试' }
+            : { kind: 'stream', message: '立案没有正常返回事件流，请重新调查' };
+
+      fail(failure);
+    } finally {
+      report();
+      if (cancelCurrent === abort) cancelCurrent = null;
+    }
+  })();
+}
+
+/** 主动停止当前调查：中止事件流并回到未开始状态。 */
+function stopInvestigation(): void {
+  cancelCurrent?.();
+  cancelCurrent = null;
+
+  const session = store.session;
+  publish({
+    state: store.state.status === 'running' ? { ...store.state, status: 'idle' } : store.state,
+    session: null,
+    terminatedHref: session?.href ?? store.terminatedHref,
+  });
+}
+
+/** 首页「终止办案」：先退回预占积分等收尾，再中止事件流。 */
+export function terminateActiveCase(): void {
+  const session = store.session;
+  if (!session) return;
+
+  session.onTerminate?.();
+  cancelCurrent?.();
+  cancelCurrent = null;
+  publish({
+    state: store.state.status === 'running' ? { ...store.state, status: 'idle' } : store.state,
+    session: null,
+    terminatedHref: session.href,
+  });
+}
+
+/** 首页重新立案前清掉上一轮终止标记，避免同一地址被误判为「已在办案」。 */
+export function resetCaseSession(): void {
+  if (!store.session && !store.terminatedHref) return;
+  publish({ ...store, session: null, terminatedHref: null });
+}
+
+/** 该办案地址已有会话或刚被终止：办案页重新可见时不要重复开同一案。 */
+export function isCaseSessionBlocked(href: string): boolean {
+  return store.session?.href === href || store.terminatedHref === href;
+}
+
+/** 本页是否被主动终止：办案页据此展示「已终止」，而不是继续看起来在跑。 */
+export function useCaseTermination(href: string | null): boolean {
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return href !== null && snapshot.terminatedHref === href;
+}
+
+/** 首页读取正在运行的办案会话；没有时返回 null。 */
+export function useActiveCase(): ActiveCaseSession | null {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot).session;
+}
+
+/**
+ * 调查事件流订阅 Hook：mock 回放与真实接口共用同一套状态。
+ * 状态在模块级单例里，页面切走不会中断正在跑的调查。
+ */
+export function useInvestigation(): InvestigationController {
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  return { state: snapshot.state, start: startInvestigation, stop: stopInvestigation };
 }

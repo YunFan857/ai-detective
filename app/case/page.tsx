@@ -23,6 +23,10 @@ import { FACTCHECK_RESERVE_POINTS } from '@/lib/credits-policy';
 import type { StepId } from '@/lib/steps';
 import {
   useInvestigation,
+  isCaseSessionBlocked,
+  terminateActiveCase,
+  useCaseTermination,
+  type ActiveCaseSession,
   type InvestigationFailure,
   type InvestigationState,
 } from '@/lib/use-investigation';
@@ -180,6 +184,8 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     previewId: string;
     selectedClaimIds: string[];
     pricePerClaim: number;
+    /** 截图识别出的原文，用于首页「正在立案」提示。 */
+    input: string;
   } | null>(null);
   /** 文案体检的已确认预览；只读一次，刷新后不重复开查。 */
   const handoffRef = useRef<ClaimsHandoff | null>(null);
@@ -189,19 +195,64 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   /** 当前案件的本地积分交易；结算 / 退回后不重复扣费。 */
   const paidTransactionRef = useRef<string | null>(null);
 
+  /** 本页对应的办案地址：只有真实查证登记到首页；演示 / mock 不登记。 */
+  const caseHref = useMemo(() => {
+    if (scriptcheckFlow) return '/case?flow=scriptcheck';
+    if (imageMode) return '/case?mode=real&input=image';
+    if (mode === 'real' && text) return `/case?mode=real&text=${encodeURIComponent(text)}`;
+    return null;
+  }, [imageMode, mode, scriptcheckFlow, text]);
+
+  const modeLabel = scriptcheckFlow
+    ? '文案体检'
+    : imageMode
+      ? '图片立案'
+      : (MODE_LABELS[mode ?? 'mock'] ?? '文字立案');
+
+  /** 本案是否已被终止：终止后顶部显示「已终止」，不再看起来还在跑。 */
+  const terminated = useCaseTermination(caseHref);
+
+  /** 首页终止办案时：退回本案预占积分并收起可能开着的弹层。 */
+  const handleTermination = useCallback(() => {
+    const transactionId = paidTransactionRef.current;
+    if (transactionId) {
+      releaseCredits(transactionId, '终止办案，预占积分已退回');
+      paidTransactionRef.current = null;
+    }
+    setVerdictOpen(false);
+    setShareOpen(false);
+  }, []);
+
+  /** 首页需要的办案会话；拿不到真实地址（mock / demo）时不登记。 */
+  const sessionFor = useCallback(
+    (inputText: string): ActiveCaseSession | undefined =>
+      caseHref
+        ? {
+            href: caseHref,
+            input: inputText,
+            label: modeLabel,
+            onTerminate: handleTermination,
+          }
+        : undefined,
+    [caseHref, handleTermination, modeLabel],
+  );
+
   /** 按当前 URL 参数开案；图片先走拆疑点，确认后再深查。 */
   const startCase = useCallback(() => {
     if (scriptcheckFlow) {
       const handoff = handoffRef.current;
       if (!handoff) return;
-      start({
-        flow: 'preview',
-        mode: 'scriptcheck',
-        inputType: 'text',
-        text: handoff.input,
-        previewId: handoff.previewId,
-        selectedClaimIds: handoff.selectedClaimIds,
-      });
+      start(
+        {
+          flow: 'preview',
+          mode: 'scriptcheck',
+          inputType: 'text',
+          text: handoff.input,
+          previewId: handoff.previewId,
+          selectedClaimIds: handoff.selectedClaimIds,
+        },
+        sessionFor(handoff.input),
+      );
       return;
     }
 
@@ -214,26 +265,32 @@ function CaseContent({ searchParams }: CaseSearchParams) {
       const image = imageRef.current;
       const confirmed = confirmedRef.current;
       if (image && confirmed) {
-        start({
-          mode: 'real',
-          inputType: 'image',
-          image,
-          previewId: confirmed.previewId,
-          selectedClaimIds: confirmed.selectedClaimIds,
-        });
+        start(
+          {
+            mode: 'real',
+            inputType: 'image',
+            image,
+            previewId: confirmed.previewId,
+            selectedClaimIds: confirmed.selectedClaimIds,
+          },
+          sessionFor(confirmed.input),
+        );
       }
       return;
     }
 
     if (mode === 'real' && text) {
-      start({ mode: 'real', inputType: 'text', text });
+      start({ mode: 'real', inputType: 'text', text }, sessionFor(text));
       return;
     }
 
     start({ mode: 'mock' });
-  }, [demoId, imageMode, mode, scriptcheckFlow, start, text]);
+  }, [demoId, imageMode, mode, scriptcheckFlow, sessionFor, start, text]);
 
   useEffect(() => {
+    // 首页「正在立案」回到本页、或刚被终止：沿用模块里的调查状态，不重复开同一案。
+    if (caseHref && isCaseSessionBlocked(caseHref)) return;
+
     if (scriptcheckFlow) {
       // StrictMode 第二次执行直接用内存里的交接，不再读一次会话存储。
       if (handoffRef.current) {
@@ -380,7 +437,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     })();
 
     return () => controller.abort();
-  }, [imageMode, mode, router, scriptcheckFlow, startCase, text]);
+  }, [caseHref, imageMode, mode, router, scriptcheckFlow, startCase, text]);
 
   /**
    * 本地积分结算：
@@ -416,11 +473,6 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   const activeStep = toStepId(reveal.viewStep);
   const closed = state.status === 'done';
   const input = state.input || text || scriptInput || '';
-  const modeLabel = scriptcheckFlow
-    ? '文案体检'
-    : imageMode
-      ? '图片立案'
-      : (MODE_LABELS[mode ?? 'mock'] ?? '文字立案');
   const creditMode: 'charged' | 'demo' | 'unconfirmed' =
     scriptcheckFlow || imageMode
       ? 'charged'
@@ -608,16 +660,20 @@ function CaseContent({ searchParams }: CaseSearchParams) {
       previewId: review.preview.previewId,
       selectedClaimIds: review.selected,
       pricePerClaim,
+      input: review.preview.input,
     };
     setReview(null);
-    start({
-      mode: 'real',
-      inputType: 'image',
-      image,
-      previewId: review.preview.previewId,
-      selectedClaimIds: review.selected,
-    });
-  }, [review, start]);
+    start(
+      {
+        mode: 'real',
+        inputType: 'image',
+        image,
+        previewId: review.preview.previewId,
+        selectedClaimIds: review.selected,
+      },
+      sessionFor(review.preview.input),
+    );
+  }, [review, sessionFor, start]);
 
   if (scriptcheckFlow && (handoffMissing || httpFailure)) {
     const expired = handoffMissing || httpFailure?.status === 404 || httpFailure?.status === 400;
@@ -660,8 +716,27 @@ function CaseContent({ searchParams }: CaseSearchParams) {
           state={state}
           activeStep={activeStep}
           closed={closed}
+          terminated={terminated}
+          onTerminate={terminateActiveCase}
         />
       </ErrorBoundary>
+
+      {terminated ? (
+        <div
+          role="status"
+          className="flex shrink-0 flex-wrap items-center gap-2 border-b-2 border-ink bg-coral-soft px-3 py-2 text-xs font-black text-coral"
+        >
+          <span className="min-w-0 flex-1">
+            本次办案已终止，未结算的预占积分已退回。
+          </span>
+          <Link
+            href="/"
+            className="shrink-0 rounded-full border-2 border-ink bg-card px-2.5 py-1 text-[10px] font-black text-ink shadow-ink-sm"
+          >
+            返回首页重新立案 →
+          </Link>
+        </div>
+      ) : null}
 
       {interrupted ? (
         <ErrorBoundary label="线索中断提示">

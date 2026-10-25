@@ -20,6 +20,7 @@ import {
 import { writeClaimsHandoff } from '@/lib/claims-intake';
 import { useCredits, type CreditsView } from '@/lib/credits';
 import { releaseCredits, reserveCredits } from '@/lib/credits-store';
+import { resetCaseSession } from '@/lib/use-investigation';
 import type { ClaimsCheckController } from '@/lib/use-claims-check';
 import type { ClaimsPreview } from '@/types/case';
 
@@ -151,6 +152,7 @@ export function useClaimsAutorun(check: ClaimsCheckController): ClaimsAutorunCon
           return false;
         }
         // 与 ⑦ 共用同一个办案页入口：/case 读取交接后显式携带 selectedClaimIds 开查。
+        resetCaseSession();
         router.push('/case?flow=scriptcheck');
         return true;
       },

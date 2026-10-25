@@ -234,3 +234,42 @@
 4. **直接 URL 入口**：`/case?mode=real&text=...` 无首页交接时不会本地扣费（仅展示提示）。如果要求所有入口都关闭扣费，建议 A 提供服务端幂等键（`previewId + selectedClaimIds` 或交易 id），前端再把直接 URL 也纳入预占。
 5. **服务端结算幂等**：本地按交易 id + `caseId` 去重；真实钱包仍建议服务端按 `previewId + selectedClaimIds` 或客户端交易 id 幂等，避免 SSE 重连 / 重试造成重复扣费。
 6. **流缺失 / done 无 billing**：前端在终止失败或结案无 billing 时退回预占，优先避免重复扣费；真实钱包需要 A 明确「服务端已扣但事件丢失」的对账 / 回滚策略。
+
+## 十二、办案会话跨页：回到首页不再卡「正在立案」
+
+### 背景
+
+从办案页点顶部「首页」返回后，首页会因路由缓存保留上一次提交时的 `submitting` 状态，底部按钮一直停在禁用的「正在立案…」；而办案页被隐藏时事件流会被卸载清理掉，导致返回后进度其实已经中断。
+
+### 本次改动
+
+- 调查状态从组件内 `useReducer` 提升为模块级单例（`lib/use-investigation.ts`），用 `useSyncExternalStore` 订阅；办案页被路由缓存隐藏时事件流继续跑，重新可见直接复用当前进度。
+- 新增真实查证的「办案会话」登记（`ActiveCaseSession`）：记录办案页地址、原始消息、立案方式与终止收尾回调；结案 / 失败 / 主动停止后自动清空。
+- 首页（`components/home/home-input-card.tsx`）在办案会话存在时，把原来的禁用按钮替换为：
+  - 绿色「⏳ 正在立案… · 回到办案页 →」，点击直接回到正在运行的 `/case`；
+  - 「终止办案」按钮，二次确认后中止事件流并退回本案预占积分。
+- 办案页顶部绿栏（`components/case/case-header.tsx`）在 running 时也显示「■ 终止办案」：点击后就地展开「终止后积分退回 / 取消 / 确认终止」；终止后顶部状态变为「■ 已终止」，并出现红色提示条与「返回首页重新立案 →」。
+- 首页被隐藏再返回时会清掉遗留的 `submitting` / 终止确认状态，避免再次卡在加载态。
+- 办案页（`app/case/page.tsx`）在路由重新可见时按 `isCaseSessionBlocked(href)` 判断，已有会话或刚被终止就不重复开同一案，避免重复请求与重复扣费；再次从首页 / 文案体检立项前用 `resetCaseSession()` 清掉终止标记。
+- 文案体检两处跳转 `/case?flow=scriptcheck`（`lib/use-claims-check.ts`、`lib/use-claims-autorun.ts`）同样先清会话标记。
+
+### 改动文件
+
+- `lib/use-investigation.ts`
+- `app/case/page.tsx`
+- `components/case/case-header.tsx`
+- `components/home/home-input-card.tsx`
+- `lib/use-claims-check.ts`
+- `lib/use-claims-autorun.ts`
+
+### 已验证
+
+- `pnpm typecheck`、`pnpm lint`（0 error）、`pnpm build` 均通过。
+- 浏览器实测（真实接口）：首页提交消息 → 办案页 → 点「首页」→ 首页显示可点击的「正在立案…」与「终止办案」→ 点击入口回到同一卷宗且进度继续 → 点「终止办案」出现二次确认 → 确认后首页恢复「立案调查」按钮。
+- 浏览器实测（真实接口）：办案页 running 时顶部出现「终止办案」→ 确认后顶部变「已终止」、出现红色提示条与「返回首页重新立案 →」→ 返回首页恢复普通「立案调查」按钮。
+- 终止时通过会话里的 `onTerminate` 退回预占积分；结算交易已是 settled 时 `releaseCredits` 幂等，不会重复退款。
+
+### 已知缺口
+
+- 办案页被路由缓存彻底淘汰（超过 3 条路由）后再返回，会按当前 URL 重新开案；真实钱包仍需服务端幂等键兜底。
+- 案件在首页停留期间结案时，本地积分结算要等回到办案页的结算 effect 才会落账；超时会由积分 store 的 10 分钟 pending 自动退回兜底。
