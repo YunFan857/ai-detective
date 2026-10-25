@@ -462,13 +462,27 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     }
   }, [state.billing, state.caseId, state.failure, state.status]);
 
-  // 第 5 步揭示时自动弹出一次；之后由底部「结案！」按钮重新打开。
+  /**
+   * 判决书自动弹出一次：分步揭示到第 5 步，或卷宗已经结案（重新进入本页时
+   * 揭示进度会从头播，若只等第 5 步会迟迟不弹）。之后由底部「结案！」按钮重新打开。
+   */
   useEffect(() => {
-    if (!state.verdict || reveal.revealedStep < 5) return;
+    if (!state.verdict) return;
+    if (reveal.revealedStep < 5 && state.status !== 'done') return;
     if (autoOpenedRef.current) return;
     autoOpenedRef.current = true;
     setVerdictOpen(true);
-  }, [reveal.revealedStep, state.verdict]);
+  }, [reveal.revealedStep, state.status, state.verdict]);
+
+  /**
+   * Cache Components 会保留办案页状态：从首页连续打开多个卷宗回放时组件不会重挂载，
+   * 上一案留下的「已自动弹过」标记会让后续案件不再弹判决书。这里在新案开始时重置。
+   */
+  useEffect(() => {
+    if (state.status !== 'running' || state.claims.length > 0) return;
+    autoOpenedRef.current = false;
+    setVerdictOpen(false);
+  }, [state.status, state.claims.length]);
 
   const activeStep = toStepId(reveal.viewStep);
   const closed = state.status === 'done';

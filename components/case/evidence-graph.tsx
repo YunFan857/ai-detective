@@ -240,17 +240,27 @@ function buildEntities(claim: Claim, sources: Source[], groups: SourceGroup[]): 
     const memberIds = group.memberIds.filter((id) => id !== group.originSourceId);
     if (memberIds.length === 0) continue;
 
-    const memberSites = memberIds
+    const memberSources = memberIds
       .map((id) => sourceById.get(id))
-      .filter((source): source is Source => source !== undefined)
-      .map(sourceSiteLabel);
+      .filter((source): source is Source => source !== undefined);
+    const memberSites = memberSources.map(sourceSiteLabel);
     const summary =
       memberSites.slice(0, 2).join(' / ') + (memberSites.length > 2 ? ' / …' : '');
+
+    /**
+     * 组卡归入组内「传得最远」的步骤。
+     * 官方原文被自媒体转载时，若按首发来源的等级落位，整组橙色卡片会在同源合并后消失；
+     * 取最远等级可让自媒体步保留「同源转载」卡片，同时首发来源仍显示在自己的步骤。
+     */
+    const step = memberSources.reduce<StepId>(
+      (furthest, source) => (sourceStep(source) > furthest ? sourceStep(source) : furthest),
+      sourceStep(origin),
+    );
 
     groupCards.push({
       kind: 'group',
       id: `group-${group.id}`,
-      step: sourceStep(origin),
+      step,
       group,
       count: memberIds.length,
       memberSites: summary || '多平台转载',
