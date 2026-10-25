@@ -1,0 +1,1966 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>AI 侦探社 · 真实查证</title>
+<style>
+:root{
+  --paper:#f2fbf6;--paper-deep:#d8f0e2;--card:#fffdf8;--beige:#fff6e3;--ink:#1f2329;
+  --brand:#00b259;--brand-dark:#00813f;--brand-soft:#e6f7ee;
+  --orange:#e37318;--orange-soft:#fdf0e4;--red:#d54941;--red-soft:#fdecea;
+  --blue:#366ef4;--blue-soft:#e9f0fe;--gray:#8a8f98;--gray-soft:#f2f3f5;
+  --yellow:#ffd84d;--canvas:#fafffc;
+  --shadow:4px 4px 0 var(--ink);--shadow-sm:3px 3px 0 var(--ink);--shadow-lg:6px 6px 0 var(--ink);
+  --radius:20px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--paper);color:var(--ink);line-height:1.55;overflow-x:hidden;
+  font-family:"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:
+    repeating-conic-gradient(from 180deg at 50% -6%,rgba(255,255,255,.55) 0deg 2.6deg,rgba(255,255,255,0) 2.6deg 11deg),
+    radial-gradient(var(--paper-deep) 1.2px,transparent 1.2px);
+  background-size:100% 100%,14px 14px;background-position:center top,center top;
+}
+button{font-family:inherit}
+img{max-width:100%;display:block}
+h1,h2,h3,h4,p{margin:0}
+a{color:inherit}
+.wrap{width:100%;max-width:1120px;margin:0 auto;padding:0 18px}
+.muted{color:var(--gray)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* 卡片与按钮 */
+.card{background:var(--card);border:3px solid var(--ink);border-radius:var(--radius);box-shadow:var(--shadow)}
+.panel-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:900;font-size:15px;margin-bottom:12px}
+.panel-title span{font-weight:700;font-size:12px;color:var(--gray)}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;
+  border:3px solid var(--ink);border-radius:999px;background:var(--card);color:var(--ink);
+  padding:10px 18px;font-size:14px;font-weight:900;line-height:1.1;box-shadow:var(--shadow-sm);
+  transition:transform .12s ease,box-shadow .12s ease;text-decoration:none;
+}
+.btn:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.btn:disabled{opacity:.42;cursor:not-allowed;transform:none;box-shadow:var(--shadow-sm);filter:grayscale(.3)}
+.btn-primary{background:var(--brand);color:#fff;text-shadow:1px 1px 0 var(--ink)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-sm{padding:7px 13px;font-size:12px;border-width:2px;box-shadow:2px 2px 0 var(--ink)}
+.btn-lg{padding:14px 28px;font-size:17px}
+.ico{width:18px;height:18px;flex:none}
+.ico-sm{width:14px;height:14px;flex:none}
+
+/* 顶栏 */
+.topbar{padding:16px 0 6px}
+.topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.brand{display:inline-flex;align-items:center;gap:8px;background:none;border:0;cursor:pointer;font-weight:900;font-size:17px}
+.brand-avatar{width:38px;height:38px;border-radius:50%;border:2.5px solid var(--ink);background:var(--beige);object-fit:cover;box-shadow:2px 2px 0 var(--ink)}
+.top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:2px solid var(--ink);
+  border-radius:999px;background:var(--card);padding:7px 13px;font-size:12.5px;font-weight:900;
+  box-shadow:2px 2px 0 var(--ink);color:var(--ink);text-decoration:none;
+}
+.pill:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
+.pill-real{background:var(--brand);color:#fff;text-shadow:1px 1px 0 var(--ink)}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.35);animation:blink 1.4s infinite}
+
+/* 首页 */
+.hero{position:relative;text-align:center;padding:26px 0 20px}
+.hero-mascot{width:132px;margin:0 auto 8px;filter:drop-shadow(3px 4px 0 rgba(31,35,41,.18));animation:float 5s ease-in-out infinite}
+.title{font-size:clamp(46px,8vw,76px);font-weight:900;letter-spacing:.05em;line-height:1;transform:rotate(-2deg);text-shadow:3px 3px 0 var(--brand-soft);display:inline-block}
+.tagline{display:inline-block;margin-top:14px;padding:7px 16px;border:2.5px solid var(--ink);border-radius:12px;background:var(--brand);color:#fff;font-weight:900;font-size:16px;transform:rotate(1deg);box-shadow:var(--shadow-sm);text-shadow:1.5px 1.5px 0 var(--ink)}
+.hero-sub{margin-top:12px;font-size:13px;font-weight:700;color:#4a5158}
+.intake{padding:20px;margin-top:6px}
+.seg{display:flex;gap:6px;background:#f4f6f5;border:2px solid var(--ink);padding:4px;border-radius:16px}
+.seg button{
+  flex:1;border:0;background:transparent;border-radius:12px;padding:10px 8px;font-size:15px;font-weight:900;
+  cursor:pointer;color:#525860;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+}
+.seg button[aria-selected="true"]{background:var(--brand);color:#fff;box-shadow:3px 3px 0 var(--ink);text-shadow:1px 1px 0 var(--ink)}
+.free{font-size:10px;padding:2px 6px;border-radius:999px;background:var(--yellow);color:var(--ink);box-shadow:1px 1px 0 var(--ink);text-shadow:none}
+.subtabs{display:flex;gap:8px;margin:14px 0 10px;flex-wrap:wrap}
+.subtabs button{border:2px solid var(--ink);background:var(--card);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:900;cursor:pointer;color:#525860;box-shadow:2px 2px 0 var(--ink)}
+.subtabs button[aria-selected="true"]{background:var(--ink);color:#fff}
+.subtabs button:disabled{opacity:.55;cursor:not-allowed;box-shadow:2px 2px 0 #c9ced4}
+.ta{width:100%;min-height:118px;resize:vertical;border:2.5px solid var(--ink);border-radius:14px;padding:12px 14px;font-family:inherit;font-size:15px;line-height:1.65;background:#fff;color:var(--ink);outline:none;box-shadow:inset 0 0 0 2px #fff}
+.ta:focus{border-color:var(--brand-dark);box-shadow:inset 0 0 0 2px var(--brand-soft)}
+.ta-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;flex-wrap:wrap}
+.examples{display:flex;gap:6px;flex-wrap:wrap}
+.example{border:1.5px dashed #9aa0a7;background:#fff;border-radius:999px;padding:4px 10px;font-size:11.5px;color:#5b6168;cursor:pointer;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.example:hover{border-color:var(--brand);color:var(--brand-dark);background:var(--brand-soft)}
+.count{font-size:12px;font-weight:800;color:var(--gray);white-space:nowrap}
+.upload{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:2.5px dashed #9aa0a7;border-radius:14px;background:#fff;padding:26px 16px;cursor:pointer;text-align:center}
+.upload:hover{border-color:var(--brand);background:var(--brand-soft)}
+.upload.has{padding:12px}
+.upload b{font-size:14px}
+.upload span{font-size:12px;color:var(--gray)}
+.upload img{max-height:200px;border-radius:10px;border:2px solid var(--ink)}
+.img-tools{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.error{margin-top:10px;font-size:13px;font-weight:800;color:var(--red);background:var(--red-soft);border:2px solid var(--red);border-radius:10px;padding:8px 10px}
+.submit-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--gray);font-weight:700}
+.foot{margin:26px 0 8px;text-align:center;font-size:11.5px;color:#8a8f98;line-height:1.8}
+.foot code{background:#e8f3ec;border-radius:4px;padding:1px 5px;color:var(--brand-dark);font-size:11px}
+.history{margin-top:24px;padding-bottom:20px}
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:12px;gap:8px}
+.sec-head h2{font-size:22px;font-weight:900}
+.sec-head span{font-size:12px;color:var(--gray);font-weight:700}
+.history-tools{display:flex;gap:8px;align-items:center}
+.history-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.history-card{padding:14px;text-align:left;cursor:pointer;transition:transform .14s}
+.history-card:hover{transform:translate(-2px,-2px);box-shadow:var(--shadow-lg)}
+.hc-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hc-date{font-size:11px;color:var(--gray);font-weight:700}
+.hc-input{margin:10px 0;font-weight:800;font-size:14px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hc-meta{display:flex;gap:10px;font-size:11.5px;color:var(--gray);font-weight:700}
+.empty{padding:22px;text-align:center;font-size:12.5px;color:var(--gray);font-weight:700}
+.link-block{padding:18px;border:2.5px dashed #c9ced4;border-radius:14px;background:#fff}
+.link-block b{display:block;font-size:14px;margin-bottom:4px}
+.link-block p{font-size:12.5px;color:#6a7178;line-height:1.7}
+
+/* 徽标 */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;border:2px solid;font-size:11.5px;font-weight:900;line-height:1.3;white-space:nowrap}
+.tone-true{background:var(--brand-soft);color:var(--brand-dark);border-color:var(--brand)}
+.tone-partly{background:#fdf1e6;color:#b35a12;border-color:#f2a05b}
+.tone-context{background:var(--orange-soft);color:var(--orange);border-color:var(--orange)}
+.tone-unverified{background:var(--gray-soft);color:#5f646c;border-color:var(--gray)}
+.tone-false{background:var(--red-soft);color:var(--red);border-color:var(--red)}
+.tone-official{background:var(--brand-soft);color:var(--brand-dark);border-color:var(--brand)}
+.tone-media{background:var(--blue-soft);color:var(--blue);border-color:var(--blue)}
+.tone-self{background:var(--orange-soft);color:var(--orange);border-color:var(--orange)}
+.tone-marketing,.tone-unknown{background:var(--gray-soft);color:#5f646c;border-color:var(--gray)}
+.risk-high{background:var(--red-soft);color:var(--red);border-color:var(--red)}
+.risk-medium{background:var(--orange-soft);color:var(--orange);border-color:var(--orange)}
+.risk-low{background:var(--gray-soft);color:#5f646c;border-color:var(--gray)}
+.tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:#f4f6f5;border:1.5px solid #c9ced4;font-size:11px;font-weight:800;color:#5b6168}
+
+/* 文案体检 */
+.claims-page{padding-bottom:120px}
+.claims-wrap{padding-top:18px}
+.claims-head{margin-bottom:16px}
+.claims-head h1{font-size:30px;font-weight:900}
+.claims-head p{font-size:13px;color:#5b6168;margin-top:4px}
+.claims-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:14px;align-items:start}
+.source-panel{padding:16px;position:relative;overflow:hidden}
+.source-text{font-size:14px;line-height:2;white-space:pre-wrap;word-break:break-word;max-height:460px;overflow:auto;padding-right:4px}
+.mk{border-radius:5px;padding:1px 2px;border-bottom:2px dashed;font-weight:700}
+.mk.high{background:var(--red-soft);border-bottom-color:var(--red)}
+.mk.medium{background:var(--orange-soft);border-bottom-color:var(--orange)}
+.mk.low{background:var(--gray-soft);border-bottom-color:var(--gray)}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:2px dashed #d7dbdf;font-size:11px;font-weight:800;color:#5b6168}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px}
+.thumb-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;background:#f7fbf8;border:1.5px solid #d7dbdf;border-radius:10px;padding:6px 8px}
+.thumb-row img{width:46px;height:46px;object-fit:cover;border-radius:7px;border:1.5px solid var(--ink)}
+.thumb-row span{font-size:11px;font-weight:800;color:#5b6168}
+.pick-tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.pick-tools .btn{background:#fff}
+.claim-list{display:flex;flex-direction:column;gap:10px}
+.claim-card{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;cursor:pointer;background:var(--card);border:2.5px solid var(--ink);border-radius:16px;padding:12px;box-shadow:3px 3px 0 #c9ced4;transition:box-shadow .14s,transform .14s,border-color .14s}
+.claim-card:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
+.claim-card.on{border-color:var(--brand);box-shadow:4px 4px 0 var(--brand);background:#f7fffa}
+.cb{width:22px;height:22px;flex:none;border-radius:7px;border:2.5px solid var(--ink);background:#fff;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.cb svg{width:14px;height:14px;opacity:0;color:#fff}
+.claim-card.on .cb{background:var(--brand)}
+.claim-card.on .cb svg{opacity:1}
+.cc-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.cc-tags{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.cc-text{font-size:13.5px;font-weight:800;line-height:1.55;word-break:break-word}
+.cc-signals{display:flex;gap:5px;flex-wrap:wrap}
+.cc-signals em{font-style:normal;font-size:10.5px;font-weight:800;color:#6a7178;background:#f2f3f5;border-radius:6px;padding:1px 6px}
+.cc-note{font-size:11.5px;color:#7a8087}
+.claims-bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:3px solid var(--ink);padding:10px 0 calc(10px + env(safe-area-inset-bottom));z-index:30;box-shadow:0 -4px 0 rgba(31,35,41,.06)}
+.claims-bar-inner{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.cost{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:800;min-width:0}
+.free-tag{background:var(--yellow);border:2px solid var(--ink);border-radius:999px;padding:3px 9px;font-size:11px;box-shadow:1px 1px 0 var(--ink)}
+.cost b{color:var(--brand-dark);font-size:15px}
+.cost-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.analyzing-card{max-width:560px;margin:32px auto 0;padding:26px;text-align:center;position:relative;overflow:hidden}
+.analyzing-card .am{width:96px;margin:0 auto 10px;animation:float 4s ease-in-out infinite}
+.analyzing-card h2{font-size:22px;font-weight:900;margin-bottom:6px}
+.analyzing-card p{font-size:13px;color:#5b6168;line-height:1.7}
+.analyzing-card .thumb{max-height:150px;margin:12px auto;border-radius:10px;border:2px solid var(--ink)}
+.scan-line{position:absolute;left:6%;right:6%;height:3px;background:linear-gradient(90deg,transparent,var(--brand),transparent);box-shadow:0 0 18px var(--brand);animation:scan 1.5s ease-in-out infinite;top:20%}
+.dots{display:flex;justify-content:center;gap:6px;margin:14px 0}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--brand);animation:dot 1.2s infinite}
+.dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+
+/* 办案页 */
+.case-bar{background:var(--brand);border-bottom:3px solid var(--ink);position:sticky;top:0;z-index:40}
+.bar-inner{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;flex-wrap:wrap}
+.bar-home{display:inline-flex;align-items:center;gap:6px;background:none;border:0;color:#fff;font-weight:900;font-size:15px;cursor:pointer;text-shadow:1px 1px 0 var(--ink)}
+.bar-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#fff;font-size:12px;font-weight:800}
+.case-id{background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.7);border-radius:999px;padding:3px 9px;letter-spacing:.04em}
+.bar-meta .badge{background:var(--card);color:var(--ink);border-color:var(--ink);box-shadow:2px 2px 0 rgba(0,0,0,.18)}
+.bar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bar-actions .btn{padding:7px 13px;font-size:12px;border-width:2px;box-shadow:2px 2px 0 var(--ink)}
+.bar-actions .btn-primary{background:#fff;color:var(--ink);text-shadow:none}
+.status-line{display:inline-flex;align-items:center;gap:6px;color:#fff;font-size:12px;font-weight:900}
+.case-wrap{padding-top:16px;padding-bottom:36px}
+.banner{margin-bottom:12px;border:2.5px solid;border-radius:14px;padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:800}
+.banner-error{background:var(--red-soft);border-color:var(--red);color:var(--red)}
+.banner-terminated{background:var(--gray-soft);border-color:#9aa0a7;color:#4a5158}
+.banner-warn{background:var(--orange-soft);border-color:var(--orange);color:#8a4510}
+.banner .btn{background:#fff;color:var(--ink)}
+.case-grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start}
+.side{display:flex;flex-direction:column;gap:12px;position:sticky;top:74px}
+.side-card{padding:14px}
+.case-input{font-size:13px;line-height:1.7;font-weight:700;word-break:break-word;max-height:150px;overflow:auto;white-space:pre-wrap}
+.case-input-meta{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.case-thumb{margin-top:8px;max-height:120px;border-radius:8px;border:2px solid var(--ink)}
+.stages{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.stage{display:flex;gap:9px;align-items:flex-start;opacity:.55}
+.stage.active,.stage.done{opacity:1}
+.stage-no{width:24px;height:24px;flex:none;border-radius:50%;border:2.5px solid var(--ink);background:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;margin-top:1px}
+.stage.done .stage-no{background:var(--brand);color:#fff}
+.stage.active .stage-no{background:var(--yellow);animation:pulse 1.2s infinite}
+.stage-body{min-width:0}
+.stage-body b{display:block;font-size:12.5px}
+.stage-body small{display:block;font-size:11px;color:#7a8087;font-weight:700;line-height:1.45;word-break:break-word}
+.live-tag{background:var(--red-soft);color:var(--red);border:1.5px solid var(--red);padding:2px 7px;border-radius:999px;font-size:10px;font-weight:900}
+.feed{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.feed li{display:flex;gap:6px;font-size:11px;line-height:1.5;border-left:3px solid #d7dbdf;padding-left:7px;color:#5b6168}
+.feed li.done{border-left-color:var(--brand)}
+.feed li.start{border-left-color:var(--yellow)}
+.feed time{flex:none;font-weight:800;color:var(--gray);font-size:10px;margin-top:1px}
+.feed span{word-break:break-word}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:#f7fbf8;border:1.5px solid #d7dbdf;border-radius:10px;padding:7px 9px}
+.stat b{display:block;font-size:16px;font-weight:900;line-height:1.2}
+.stat span{font-size:10.5px;color:var(--gray);font-weight:700}
+.billing-line{font-size:12px;font-weight:800;display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #dfe3e6}
+.billing-line:last-child{border-bottom:0}
+.billing-line b{font-size:14px}
+.side-note{font-size:11px;color:var(--gray);margin-top:6px;line-height:1.5}
+.main{display:flex;flex-direction:column;gap:14px;min-width:0}
+.evidence-card{padding:16px}
+.evidence-top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.evidence-top h2{font-size:20px;font-weight:900}
+.evidence-top span{font-size:12px;color:var(--gray);font-weight:800}
+.claim-block{margin-bottom:18px}
+.claim-block:last-child{margin-bottom:0}
+.claim-head{display:flex;gap:9px;align-items:flex-start;margin-bottom:10px;background:#f7fbf8;border:2px dashed #c9ced4;border-radius:12px;padding:9px 11px;flex-wrap:wrap}
+.claim-no{flex:none;background:var(--ink);color:#fff;border-radius:7px;padding:2px 7px;font-size:10.5px;font-weight:900;margin-top:2px}
+.claim-head p{flex:1;font-size:12.5px;font-weight:800;line-height:1.5;word-break:break-word;min-width:160px}
+.claim-tags{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.progress-chip{font-size:10px;font-weight:900;border-radius:999px;padding:1px 7px;border:1.5px solid #c9ced4;color:#5b6168;background:#fff}
+.progress-chip.searching{color:var(--orange);border-color:var(--orange);background:var(--orange-soft)}
+.progress-chip.grading{color:var(--blue);border-color:var(--blue);background:var(--blue-soft)}
+.progress-chip.done{color:var(--brand-dark);border-color:var(--brand);background:var(--brand-soft)}
+.source-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.source-card{display:flex;flex-direction:column;gap:6px;text-align:left;cursor:pointer;background:#fff;border:2px solid var(--ink);border-left-width:6px;border-radius:12px;padding:10px;box-shadow:2px 2px 0 #c9ced4;transition:transform .14s,box-shadow .14s}
+.source-card:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+.source-card.tier-official{border-left-color:var(--brand)}
+.source-card.tier-media{border-left-color:var(--blue)}
+.source-card.tier-self{border-left-color:var(--orange)}
+.source-card.tier-marketing,.source-card.tier-unknown{border-left-color:var(--gray)}
+.source-card.unreachable{opacity:.62;border-left-color:var(--red)}
+.sc-top{display:flex;justify-content:space-between;gap:5px;align-items:center;flex-wrap:wrap}
+.stance{font-size:10px;font-weight:900;padding:1px 6px;border-radius:999px}
+.stance.support{background:var(--brand-soft);color:var(--brand-dark)}
+.stance.refute{background:var(--red-soft);color:var(--red)}
+.stance.irrelevant{background:var(--gray-soft);color:#5f646c}
+.sc-title{font-size:12.5px;font-weight:900;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.sc-snippet{font-size:11px;color:#6a7178;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.sc-foot{display:flex;justify-content:space-between;gap:6px;font-size:10px;color:var(--gray);font-weight:800;margin-top:auto}
+.sc-group{align-self:flex-start;font-size:9.5px;font-weight:900;color:var(--orange);background:var(--orange-soft);border-radius:5px;padding:1px 5px}
+.more-card{display:flex;align-items:center;justify-content:center;border:2px dashed #9aa0a7;border-radius:12px;background:#f9fbfa;color:#5b6168;font-size:11.5px;font-weight:900;cursor:pointer;min-height:104px;padding:10px;text-align:center}
+.more-card:hover{border-color:var(--brand);color:var(--brand-dark);background:var(--brand-soft)}
+.skeleton{height:104px;border-radius:12px;border:2px dashed #c9ced4;background:linear-gradient(100deg,#f6f8f7 30%,#eef2ef 50%,#f6f8f7 70%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}
+.skeleton-line{height:12px;border-radius:6px;background:#e8ece9;margin-top:8px}
+.empty-src{font-size:11.5px;color:var(--gray);font-weight:700;border:1.5px dashed #c9ced4;border-radius:10px;padding:12px;text-align:center}
+.timeline-card{padding:16px}
+.tl-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tl-tabs button{border:1.5px solid #c9ced4;background:#fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:800;cursor:pointer;color:#5b6168}
+.tl-tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.timeline{list-style:none;margin:0;padding:0;display:flex;overflow-x:auto;padding-bottom:4px}
+.tl-step{flex:1 0 190px;position:relative;padding:0 14px 0 0}
+.tl-step:not(:last-child)::after{content:"";position:absolute;top:9px;left:14px;right:0;height:2px;background:#c9ced4}
+.tl-dot{width:10px;height:10px;border-radius:50%;background:var(--brand);border:2px solid var(--ink);position:relative;z-index:1;margin-bottom:8px}
+.tl-step.mutated .tl-dot{background:var(--orange)}
+.tl-date{font-size:10px;color:var(--gray);font-weight:800}
+.tl-site{font-size:11px;font-weight:900;margin:2px 0 4px}
+.tl-quote{font-size:11px;color:#5b6168;line-height:1.5;background:#f7fbf8;border-radius:8px;padding:7px 8px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.tl-mutation{display:inline-block;font-size:10px;font-weight:900;color:var(--orange);background:var(--orange-soft);border-radius:5px;padding:1px 6px;margin-top:6px}
+.verdict-card{padding:18px;position:relative;overflow:hidden}
+.verdict-card::before{content:"";position:absolute;inset:auto -30px -60px auto;width:180px;height:180px;border-radius:50%;background:var(--brand-soft);opacity:.6;z-index:0}
+.verdict-head{display:flex;gap:16px;align-items:flex-start;position:relative;z-index:1;flex-wrap:wrap}
+.stamp{flex:none;width:106px;height:106px;border-radius:50%;border:4px solid var(--ink);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:900;transform:rotate(-9deg);box-shadow:4px 4px 0 var(--ink);text-shadow:2px 2px 0 rgba(31,35,41,.55);animation:pop .42s cubic-bezier(.2,1.4,.4,1) both;letter-spacing:.04em;text-align:center;padding:8px}
+.verdict-head .vh-main{flex:1;min-width:200px}
+.vh-kicker{font-size:11px;font-weight:900;color:var(--gray);letter-spacing:.12em;margin-bottom:4px}
+.verdict-head h2{font-size:23px;line-height:1.3;margin-bottom:6px;font-weight:900;word-break:break-word}
+.verdict-head p{font-size:13.5px;color:#4a5158;line-height:1.7;word-break:break-word}
+.conf{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.conf span{font-size:11px;font-weight:900;color:var(--gray);white-space:nowrap}
+.conf-bar{flex:1;min-width:120px;max-width:220px;height:12px;border:2px solid var(--ink);border-radius:999px;overflow:hidden;background:#fff}
+.conf-bar i{display:block;height:100%;background-color:var(--brand);background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.38) 0 5px,transparent 5px 10px)}
+.evidence-state{font-size:11px;font-weight:900;color:#5b6168;background:#f2f3f5;border-radius:999px;padding:2px 8px}
+.claim-verdicts{margin-top:16px;display:flex;flex-direction:column;gap:8px;position:relative;z-index:1}
+.cv-row{display:flex;gap:10px;align-items:flex-start;border-top:2px dashed #dfe3e6;padding-top:9px}
+.cv-row:first-child{border-top:0;padding-top:0}
+.cv-main{flex:1;min-width:0}
+.cv-row p{font-size:12.5px;font-weight:800;line-height:1.5;word-break:break-word}
+.cv-row small{display:block;font-size:11px;color:var(--gray);font-weight:700;line-height:1.6;word-break:break-word}
+.cv-extra{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.cv-extra .tag{font-size:10px}
+.cv-cites{margin-top:4px;display:flex;gap:5px;flex-wrap:wrap}
+.cite{font-size:10px;font-weight:800;color:var(--blue);background:var(--blue-soft);border-radius:5px;padding:1px 5px;cursor:pointer}
+.rebuttal{margin-top:16px;background:var(--beige);border:2.5px solid var(--ink);border-radius:14px;padding:13px;position:relative;z-index:1}
+.rebuttal h4{font-size:12px;font-weight:900;color:var(--orange);letter-spacing:.1em;margin-bottom:6px}
+.rebuttal b{display:block;font-size:14px;margin-bottom:4px;word-break:break-word}
+.rebuttal p{font-size:12.5px;line-height:1.7;color:#4a5158;word-break:break-word}
+.rb-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.verdict-skeleton{padding:24px;text-align:center}
+.verdict-skeleton b{font-size:15px;font-weight:900;display:block;margin-bottom:8px}
+.verdict-skeleton p{font-size:12px;color:var(--gray);line-height:1.6}
+
+/* 抽屉 / 弹窗 */
+.scrim{position:fixed;inset:0;background:rgba(31,35,41,.45);z-index:60;animation:fade .18s ease}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);background:var(--card);z-index:61;border-left:3px solid var(--ink);box-shadow:-6px 0 0 rgba(31,35,41,.12);padding:18px;overflow:auto;animation:slideIn .24s cubic-bezier(.2,.9,.3,1)}
+.drawer-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}
+.drawer-head h3{font-size:18px;font-weight:900}
+.icon-btn{width:36px;height:36px;border-radius:50%;border:2px solid var(--ink);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:2px 2px 0 var(--ink)}
+.drawer-site{display:flex;gap:8px;align-items:center;margin:10px 0;font-size:12px;font-weight:800;color:var(--gray);flex-wrap:wrap}
+.drawer-title{font-size:16px;font-weight:900;line-height:1.5;margin-bottom:8px;word-break:break-word}
+.drawer-snippet{font-size:13px;line-height:1.8;color:#4a5158;background:#f7fbf8;border:1.5px solid #d7dbdf;border-radius:10px;padding:10px;word-break:break-word}
+.drawer-meta{margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#5b6168}
+.drawer-meta div{display:flex;justify-content:space-between;gap:12px;border-bottom:1px dashed #e2e5e8;padding-bottom:6px;word-break:break-word}
+.drawer-meta b{font-weight:900;color:var(--ink);text-align:right}
+.drawer-link{display:inline-flex;margin-top:12px;font-size:12px;font-weight:900;color:var(--blue);text-decoration:underline;word-break:break-all}
+.group-box{margin-top:14px;border:2px dashed #c9ced4;border-radius:12px;padding:10px}
+.group-box h4{font-size:12px;font-weight:900;margin-bottom:6px}
+.group-box button{display:block;width:100%;text-align:left;background:#fff;border:1.5px solid #d7dbdf;border-radius:8px;padding:7px 9px;margin-top:6px;font-size:11.5px;font-weight:800;cursor:pointer;color:var(--ink)}
+.group-box button:hover{border-color:var(--brand);background:var(--brand-soft)}
+.modal-wrap{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:18px}
+.modal{width:min(420px,100%);padding:20px;position:relative;z-index:71;animation:pop .25s cubic-bezier(.2,1.3,.4,1)}
+.modal h3{font-size:19px;font-weight:900;margin-bottom:8px}
+.modal p{font-size:13px;line-height:1.7;color:#4a5158;word-break:break-word}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);background:var(--ink);color:#fff;border-radius:999px;padding:10px 18px;font-size:13px;font-weight:800;z-index:90;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:88vw;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.blocked{max-width:620px;margin:8vh auto;padding:24px}
+.blocked h1{font-size:28px;font-weight:900;margin-bottom:8px}
+.blocked p{font-size:13px;line-height:1.8;color:#4a5158}
+.blocked pre{margin:12px 0;background:var(--ink);color:#d8f0e2;border-radius:10px;padding:12px;font-size:12px;overflow:auto;line-height:1.8}
+.blocked ol{margin:10px 0 0;padding-left:20px;font-size:13px;line-height:1.9}
+.blocked code{background:#f2f3f5;border-radius:4px;padding:1px 5px;font-size:12px}
+
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes slideIn{from{transform:translateX(30px);opacity:.4}to{transform:none;opacity:1}}
+@keyframes pop{0%{transform:scale(.7) rotate(-14deg);opacity:0}100%{transform:scale(1) rotate(-9deg);opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,178,89,.35)}50%{box-shadow:0 0 0 5px rgba(0,178,89,0)}}
+@keyframes scan{0%,100%{top:14%;opacity:.2}50%{top:76%;opacity:1}}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes dot{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}}
+
+@media (max-width:900px){
+  .history-grid{grid-template-columns:1fr 1fr}
+  .claims-grid{grid-template-columns:1fr}
+  .case-grid{grid-template-columns:1fr}
+  .side{position:static;order:2}
+  .main{order:1}
+}
+@media (max-width:640px){
+  .wrap{padding:0 12px}
+  .hero{padding-top:18px}
+  .hero-mascot{width:104px}
+  .title{font-size:46px}
+  .history-grid{grid-template-columns:1fr}
+  .intake{padding:14px}
+  .seg button{font-size:13.5px;padding:9px 4px}
+  .submit-row .btn{width:100%}
+  .claims-bar-inner{justify-content:space-between}
+  .cost{gap:6px;font-size:12px}
+  .cost-actions{width:100%}
+  .cost-actions .btn{flex:1}
+  .verdict-head{gap:12px}
+  .stamp{width:86px;height:86px;font-size:18px}
+  .balance-card{padding:14px}
+  .source-grid{grid-template-columns:1fr 1fr}
+  .tl-step{flex-basis:160px}
+  .bar-inner{gap:6px}
+  .bar-actions .btn{font-size:11px;padding:6px 10px}
+  .side{top:auto}
+  .claims-head h1{font-size:25px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="overlays"></div>
+<div id="toast" class="toast" role="status"></div>
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 基础工具 ---------- */
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+  var clip = function (s, n) { s = String(s || '').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  function fmtDate(value) {
+    if (!value) return '时间不详';
+    var t = Date.parse(value);
+    if (Number.isNaN(t)) return '时间不详';
+    var d = new Date(t);
+    return new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(d).replace(/\//g, '-');
+  }
+  function fmtDateTime(value) {
+    if (!value) return '时间不详';
+    var t = Date.parse(value);
+    if (Number.isNaN(t)) return '时间不详';
+    var d = new Date(t);
+    return new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).format(d).replace(/\//g, '-');
+  }
+  function fmtClock(ms) { var s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + pad(s % 60); }
+  function hostOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./i, ''); } catch (e) { return ''; }
+  }
+  function siteLabel(source) {
+    var site = String(source.site || '').trim();
+    if (site) return site;
+    var host = hostOf(source.url || '');
+    return host || '来源不详';
+  }
+  function titleLabel(source) { return String(source.title || '').trim() || '暂无标题'; }
+  function snippetLabel(source) {
+    return String(source.snippet || '').trim() || String(source.title || '').trim() || '暂无摘要';
+  }
+  function isSafeUrl(url) { return /^https?:\/\//i.test(String(url || '')); }
+
+  var ICONS = {
+    coin: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9M9.3 10.2h5.4M9.3 13.8h5.4"/></svg>',
+    close: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    back: '<svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"/></svg>',
+    link: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
+    image: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 2-2 5 5"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
+    doc: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg>',
+    shield: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>'
+  };
+
+  /* ---------- 枚举 ---------- */
+  var VERDICTS = {
+    true: { label: '属实', cls: 'true', color: '#00b259' },
+    partly_true: { label: '部分属实', cls: 'partly', color: '#f2a05b' },
+    out_of_context: { label: '断章取义', cls: 'context', color: '#e37318' },
+    unverified: { label: '无法证实', cls: 'unverified', color: '#8a8f98' },
+    false: { label: '谣言', cls: 'false', color: '#d54941' }
+  };
+  var TIERS = {
+    official: { label: '官方/学术', cls: 'official' },
+    media: { label: '权威媒体', cls: 'media' },
+    self: { label: '自媒体', cls: 'self' },
+    marketing: { label: '营销号', cls: 'marketing' },
+    unknown: { label: '未分级', cls: 'unknown' }
+  };
+  var STANCES = { support: '支持', refute: '反驳', irrelevant: '无关' };
+  var RISKS = {
+    high: { label: '高风险', cls: 'risk-high' },
+    medium: { label: '中风险', cls: 'risk-medium' },
+    low: { label: '低风险', cls: 'risk-low' }
+  };
+  var CATS = { person: '人物', time: '时间', place: '地点', number: '数字', quote: '引语', causal: '因果', superlative: '绝对化', other: '其他' };
+  var SCRIPT_LABELS = { recorded: '正史有载', legend: '野史传说', doubtful: '存疑', fabricated: '营销号编造' };
+  var STAGES = [
+    { key: 'claims', label: '拆解疑点' },
+    { key: 'search', label: '正反搜证' },
+    { key: 'grade', label: '来源分级' },
+    { key: 'cluster', label: '同源合并' },
+    { key: 'trace', label: '溯源时间线' },
+    { key: 'verdict', label: '五档判决' }
+  ];
+  var EXAMPLES = {
+    factcheck: [
+      '隔夜水放一晚会产生致癌物亚硝酸盐，千万不能喝',
+      '每天必须喝满 8 杯水，否则身体会出问题',
+      '手机放在枕边会致癌，睡觉前一定要关机'
+    ],
+    scriptcheck: [
+      '这款「颈椎康复枕」3 天就能根治颈椎病，100% 有效，已经帮助 10 万人康复，不用打针也不用吃药，错过再等一年。',
+      '这款养生茶 7 天排出十年毒素，喝了的人都说好，原价 999 今天只要 99。',
+      '据内部人士透露，某地已经开始实施一项所有人都不知道的新政策。'
+    ]
+  };
+  var HISTORY_KEY = 'ai-detective:real-cases:v1';
+
+  /* ---------- 状态 ---------- */
+  var state = {
+    screen: 'home',
+    mode: 'factcheck',
+    inputType: 'text',
+    draft: { text: '', url: '', image: '', imageMeta: null },
+    error: '',
+    analyzing: false,
+    analyzeCtrl: null,
+    preview: null,
+    selected: {},
+    run: null,
+    expanded: {},
+    timelineClaim: null,
+    drawer: null,
+    modal: null,
+    history: [],
+    elapsedTimer: null
+  };
+
+  /* ---------- 历史卷宗（真实结果） ---------- */
+  function loadHistory() {
+    try {
+      var raw = localStorage.getItem(HISTORY_KEY);
+      if (!raw) return [];
+      var list = JSON.parse(raw);
+      if (!Array.isArray(list)) return [];
+      return list.filter(function (item) {
+        return item && typeof item.id === 'string' && Array.isArray(item.claims) && Array.isArray(item.sources);
+      }).slice(0, 6);
+    } catch (e) { return []; }
+  }
+  function saveHistory(caseFile) {
+    try {
+      var list = loadHistory().filter(function (item) { return item.id !== caseFile.id; });
+      list.unshift(caseFile);
+      list = list.slice(0, 6);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+      state.history = list;
+    } catch (e) {
+      try {
+        var shortList = (state.history || []).filter(function (item) { return item.id !== caseFile.id; });
+        shortList.unshift(caseFile);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(shortList.slice(0, 2)));
+        state.history = shortList.slice(0, 2);
+      } catch (err) { state.history = [caseFile].concat(state.history || []).slice(0, 6); }
+    }
+  }
+
+  /* ---------- 接口 ---------- */
+  function ApiError(status, message) {
+    this.name = 'ApiError';
+    this.status = status;
+    this.message = message || ('接口返回 HTTP ' + status);
+  }
+  ApiError.prototype = Object.create(Error.prototype);
+
+  function postJson(path, body, timeoutMs) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, timeoutMs || 120000);
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    }).then(function (response) {
+      return response.json().catch(function () { return null; }).then(function (data) {
+        if (!response.ok) {
+          throw new ApiError(response.status, (data && (data.message || data.error)) || ('接口返回 HTTP ' + response.status));
+        }
+        return data;
+      });
+    }).catch(function (error) {
+      if (error && error.name === 'AbortError') {
+        throw new ApiError(0, '请求超时或已取消');
+      }
+      throw error;
+    }).finally(function () { clearTimeout(timer); });
+  }
+
+  /** 解析 SSE：按空行切块，取出 data: 行里的 JSON。 */
+  function drainSse(buffer, onEvent) {
+    var blocks = buffer.replace(/\r\n/g, '\n').split('\n\n');
+    var rest = blocks.pop() || '';
+    blocks.forEach(function (block) {
+      var data = block.split('\n').filter(function (line) { return line.indexOf('data:') === 0; })
+        .map(function (line) { return line.slice(5).trim(); }).join('\n');
+      if (!data) return;
+      try {
+        var parsed = JSON.parse(data);
+        if (parsed && typeof parsed.type === 'string') onEvent(parsed);
+      } catch (e) { /* 单条事件解析失败不影响整条流 */ }
+    });
+    return rest;
+  }
+
+  /* ---------- 案件状态 ---------- */
+  function newRun(meta) {
+    return {
+      caseId: null,
+      createdAt: meta.createdAt || new Date().toISOString(),
+      input: meta.input || '',
+      inputImage: meta.inputImage || null,
+      mode: meta.mode || 'factcheck',
+      status: 'running',
+      stage: null,
+      logs: [],
+      claims: [],
+      sources: [],
+      sourceMap: {},
+      groups: [],
+      timelines: {},
+      claimProgress: {},
+      verdict: null,
+      stats: null,
+      billing: null,
+      errors: [],
+      fatal: null,
+      caseFile: null,
+      startedAt: Date.now(),
+      closedAt: null,
+      terminated: false,
+      timedOut: false,
+      fromHistory: false,
+      lastBody: null,
+      controller: null
+    };
+  }
+  function sourceOf(run, id) { return run && run.sourceMap ? run.sourceMap[id] : null; }
+  function sourceListForClaim(run, claimId) {
+    return run.sources.filter(function (source) { return source.claimId === claimId; });
+  }
+  function groupFor(run, source) {
+    if (!source || !source.groupId) return null;
+    return run.groups.filter(function (group) { return group.id === source.groupId; })[0] || null;
+  }
+  function groupSize(run, source) {
+    var group = groupFor(run, source);
+    return group && group.memberIds ? group.memberIds.length : 0;
+  }
+
+  function applyEvent(run, event) {
+    switch (event.type) {
+      case 'case':
+        run.caseId = event.id;
+        run.input = event.input || run.input;
+        break;
+      case 'stage':
+        run.stage = event.stage;
+        run.logs.push({ stage: event.stage, status: event.status, message: event.message, at: Date.now() });
+        break;
+      case 'claims':
+        run.claims = Array.isArray(event.claims) ? event.claims : [];
+        break;
+      case 'source':
+        if (event.source && event.source.id) {
+          if (!run.sourceMap[event.source.id]) run.sources.push(event.source);
+          run.sourceMap[event.source.id] = event.source;
+        }
+        break;
+      case 'source_update':
+        if (event.id && run.sourceMap[event.id]) {
+          run.sourceMap[event.id] = Object.assign({}, run.sourceMap[event.id], event.patch || {});
+          run.sources = run.sources.map(function (source) {
+            return source.id === event.id ? run.sourceMap[event.id] : source;
+          });
+        }
+        break;
+      case 'groups':
+        run.groups = Array.isArray(event.groups) ? event.groups : [];
+        break;
+      case 'timeline':
+        run.timelines[event.claimId] = Array.isArray(event.steps) ? event.steps : [];
+        break;
+      case 'claim_progress':
+        run.claimProgress[event.claimId] = event.status;
+        break;
+      case 'verdict':
+        run.verdict = event.verdict;
+        break;
+      case 'stats':
+        run.stats = event.stats;
+        break;
+      case 'billing':
+        run.billing = event.billing;
+        break;
+      case 'error':
+        run.errors.push(event.message);
+        if (!event.recoverable) {
+          run.fatal = event.message;
+          run.status = 'error';
+          run.closedAt = Date.now();
+        }
+        break;
+      case 'done':
+        hydrateDone(run, event.caseFile);
+        break;
+      default:
+        break;
+    }
+  }
+
+  function hydrateDone(run, caseFile) {
+    if (!caseFile) return;
+    run.caseFile = caseFile;
+    run.caseId = caseFile.id;
+    run.input = caseFile.input;
+    run.createdAt = caseFile.createdAt || run.createdAt;
+    run.mode = caseFile.mode || run.mode;
+    run.claims = caseFile.claims || [];
+    run.sources = caseFile.sources || [];
+    run.sourceMap = {};
+    run.sources.forEach(function (source) { run.sourceMap[source.id] = source; });
+    run.groups = caseFile.groups || [];
+    run.timelines = caseFile.timelines || {};
+    run.verdict = caseFile.verdict;
+    run.stats = caseFile.stats;
+    run.billing = run.billing || caseFile.billing || null;
+    run.status = 'done';
+    run.closedAt = Date.now();
+    saveHistory(caseFile);
+  }
+
+  function runFromCaseFile(caseFile) {
+    var run = newRun({ input: caseFile.input, mode: caseFile.mode || 'factcheck' });
+    hydrateDone(run, caseFile);
+    run.fromHistory = true;
+    run.status = 'done';
+    run.startedAt = Date.parse(caseFile.createdAt) || Date.now();
+    run.closedAt = run.startedAt;
+    return run;
+  }
+
+  /* ---------- 渲染调度 ---------- */
+  var renderQueued = false;
+  function scheduleRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(function () { renderQueued = false; render(); });
+  }
+  function render() {
+    if (state.screen === 'home') $('#app').innerHTML = renderHome();
+    else if (state.screen === 'preview') $('#app').innerHTML = renderPreview();
+    else if (state.screen === 'case') $('#app').innerHTML = renderCase();
+    renderOverlays();
+  }
+
+  /* ---------- 首页 ---------- */
+  function renderHome() {
+    var max = state.mode === 'scriptcheck' ? 1500 : 500;
+    var inputHtml = '';
+
+    if (state.inputType === 'text') {
+      inputHtml =
+        '<textarea id="intake-text" class="ta" rows="5" maxlength="' + max + '" placeholder="' + (state.mode === 'scriptcheck' ? '把要体检的文案整段贴进来，50–1500 字。' : '把听来的消息贴进来，4–500 字。') + '">' + esc(state.draft.text) + '</textarea>' +
+        '<div class="ta-foot">' +
+          '<div class="examples">' + EXAMPLES[state.mode].map(function (example, i) {
+            return '<button class="example" data-act="example" data-id="' + i + '" title="' + esc(example) + '">' + esc(clip(example, 22)) + '</button>';
+          }).join('') + '</div>' +
+          '<span class="count" id="char-count">' + state.draft.text.length + ' / ' + max + '</span>' +
+        '</div>';
+    } else if (state.inputType === 'image') {
+      if (state.draft.image) {
+        inputHtml =
+          '<div class="upload has"><img src="' + state.draft.image + '" alt="待识别截图">' +
+            '<span>截图已压缩' + (state.draft.imageMeta ? '（' + state.draft.imageMeta.width + '×' + state.draft.imageMeta.height + ' · ' + Math.round(state.draft.imageMeta.bytes / 1024) + 'KB）' : '') + '，提交后先识别图中主张</span></div>' +
+          '<div class="img-tools"><label class="btn btn-sm" for="image-file">重新选择</label>' +
+            '<button class="btn btn-sm" data-act="clear-image">移除截图</button></div>' +
+          '<input type="file" id="image-file" accept="image/*" class="sr">';
+      } else {
+        inputHtml =
+          '<label class="upload" for="image-file">' + ICONS.image +
+            '<b>上传截图或聊天记录</b><span>自动压缩到最长边 1600px · 不超过 1MB</span></label>' +
+          '<input type="file" id="image-file" accept="image/*" class="sr">';
+      }
+    } else {
+      inputHtml =
+        '<div class="link-block"><b>' + ICONS.link + ' 链接立案暂未接入</b>' +
+          '<p>服务端目前只支持文本与图片输入，链接解析接口尚未上线。请复制页面正文，切换到「文字」粘贴后查证。</p>' +
+          '<div style="margin-top:10px"><button class="btn btn-sm" data-act="input-type" data-id="text">改为粘贴正文</button></div></div>';
+    }
+
+    var subTabs = [['text', '文字'], ['image', '图片'], ['link', '链接']].map(function (tab) {
+      return '<button data-act="input-type" data-id="' + tab[0] + '" aria-selected="' + (state.inputType === tab[0]) + '">' + tab[1] + (tab[0] === 'link' ? ' · 未接入' : '') + '</button>';
+    }).join('');
+
+    var hint = state.mode === 'scriptcheck'
+      ? '免费拆疑点 · 不调用元宝搜索 · 勾选后再查证'
+      : '自动拆解最多 3 个疑点 · 每个疑点 8 积分';
+
+    return '' +
+    '<div class="page">' +
+      '<header class="topbar"><div class="wrap topbar-inner">' +
+        '<button class="brand" data-act="home"><img class="brand-avatar" src="/images/detective-avatar.png" alt="">AI 侦探社</button>' +
+        '<div class="top-actions">' +
+          '<span class="pill pill-real"><span class="live-dot"></span>真实接口</span>' +
+          '<a class="pill" href="/">完整版</a>' +
+        '</div>' +
+      '</div></header>' +
+      '<section class="hero">' +
+        '<img class="hero-mascot" src="/images/detective-logo.png" alt="AI 侦探形象">' +
+        '<h1 class="title">AI 侦探社!</h1>' +
+        '<div><span class="tagline">把结论的来路查清楚</span></div>' +
+        '<p class="hero-sub">拆解疑点 · 正反搜证 · 来源分级 · 溯源变形 · 五档判决</p>' +
+      '</section>' +
+      '<main class="wrap">' +
+        '<section class="card intake">' +
+          '<div class="seg" role="tablist">' +
+            '<button data-act="mode" data-id="factcheck" aria-selected="' + (state.mode === 'factcheck') + '">消息查证</button>' +
+            '<button data-act="mode" data-id="scriptcheck" aria-selected="' + (state.mode === 'scriptcheck') + '">文案体检 <span class="free">免费拆疑点</span></button>' +
+          '</div>' +
+          '<div class="subtabs">' + subTabs + '</div>' +
+          inputHtml +
+          (state.error ? '<p class="error">' + esc(state.error) + '</p>' : '') +
+          '<div class="submit-row">' +
+            '<span class="hint">' + hint + '</span>' +
+            '<button class="btn btn-primary btn-lg" data-act="submit"' + (state.inputType === 'link' ? ' disabled' : '') + '>' + (state.inputType === 'image' || state.mode === 'scriptcheck' ? '拆解疑点' : '立案调查') + '</button>' +
+          '</div>' +
+        '</section>' +
+        '<section class="history" id="history">' +
+          '<div class="sec-head"><h2>本机历史卷宗</h2>' +
+            '<div class="history-tools"><span>真实查证结果</span>' + (state.history.length ? '<button class="btn btn-sm" data-act="clear-history">清空</button>' : '') + '</div>' +
+          '</div>' +
+          (state.history.length
+            ? '<div class="history-grid">' + state.history.map(historyCard).join('') + '</div>'
+            : '<div class="card empty">完成一宗真实查证后，结案卷宗会自动收录在这里。</div>') +
+        '</section>' +
+        '<footer class="foot">' +
+          '本页直接调用 <code>/api/extract-claims</code> 与 <code>/api/investigate</code> 真实接口：元宝搜索 + 大模型实时查证，不使用本地模拟数据。<br>' +
+          '需通过 <code>pnpm dev</code> 启动后访问 <code>http://localhost:3000/index.html</code>；直接双击文件无法调用接口。' +
+        '</footer>' +
+      '</main>' +
+    '</div>';
+  }
+
+  function historyCard(caseFile) {
+    var level = caseFile.verdict ? VERDICTS[caseFile.verdict.level] : null;
+    return '<button class="card history-card" data-act="open-history" data-id="' + esc(caseFile.id) + '">' +
+      '<div class="hc-top">' +
+        (level ? '<span class="badge tone-' + level.cls + '">' + level.label + '</span>' : '<span class="badge tone-unverified">未生成判决</span>') +
+        '<span class="hc-date">' + fmtDate(caseFile.createdAt) + '</span>' +
+      '</div>' +
+      '<p class="hc-input">' + esc(clip(caseFile.input, 60)) + '</p>' +
+      '<div class="hc-meta"><span>' + (caseFile.mode === 'scriptcheck' ? '文案体检' : '消息查证') + '</span><span>' + (caseFile.claims || []).length + ' 个疑点</span><span>' + (caseFile.sources || []).length + ' 条来源</span></div>' +
+    '</button>';
+  }
+
+  /* ---------- 拆疑点页 ---------- */
+  function resolveSpan(claim, text) {
+    if (claim && claim.span && typeof claim.span.start === 'number' && typeof claim.span.end === 'number' &&
+        claim.span.start >= 0 && claim.span.end <= text.length && claim.span.end > claim.span.start) {
+      return { start: claim.span.start, end: claim.span.end };
+    }
+    var sentence = String(claim && (claim.sentence || claim.text) || '');
+    if (!sentence) return null;
+    var index = text.indexOf(sentence);
+    return index >= 0 ? { start: index, end: index + sentence.length } : null;
+  }
+  function highlightText(text, claims) {
+    var spans = claims.map(function (claim, i) {
+      var span = resolveSpan(claim, text);
+      return span ? { start: span.start, end: span.end, risk: claim.riskLevel || 'low', index: i } : null;
+    }).filter(Boolean).sort(function (a, b) { return a.start - b.start; });
+
+    var out = '', cursor = 0;
+    spans.forEach(function (span) {
+      if (span.start < cursor) return;
+      out += esc(text.slice(cursor, span.start));
+      out += '<mark class="mk ' + span.risk + '">' + esc(text.slice(span.start, span.end)) + '</mark>';
+      cursor = span.end;
+    });
+    out += esc(text.slice(cursor));
+    return out;
+  }
+  function claimCard(claim) {
+    var on = !!state.selected[claim.id];
+    var risk = RISKS[claim.riskLevel] || { label: '未标风险', cls: 'risk-low' };
+    var category = claim.category ? (CATS[claim.category] || claim.category) : '';
+    var signals = Array.isArray(claim.signals) ? claim.signals : [];
+    return '<button class="claim-card' + (on ? ' on' : '') + '" data-act="toggle-claim" data-id="' + esc(claim.id) + '">' +
+      '<span class="cb">' + ICONS.check + '</span>' +
+      '<span class="cc-body">' +
+        '<span class="cc-tags"><span class="badge ' + risk.cls + '">' + risk.label + '</span>' + (category ? '<span class="tag">' + esc(category) + '</span>' : '') + '</span>' +
+        '<span class="cc-text">' + esc(claim.text) + '</span>' +
+        (signals.length ? '<span class="cc-signals">' + signals.slice(0, 4).map(function (signal) { return '<em>' + esc(signal) + '</em>'; }).join('') + '</span>' : '') +
+        (claim.consequence ? '<span class="cc-note">' + esc(claim.consequence) + '</span>' : '') +
+      '</span>' +
+    '</button>';
+  }
+
+  function renderPreview() {
+    if (state.analyzing) {
+      var sourceText = state.inputType === 'image' ? '' : state.draft.text.trim();
+      return '' +
+      '<div class="page">' +
+        '<header class="case-bar"><div class="wrap bar-inner">' +
+          '<button class="bar-home" data-act="cancel-analyze">' + ICONS.back + 'AI 侦探社</button>' +
+          '<div class="bar-meta"><span class="badge">' + (state.mode === 'scriptcheck' ? '文案体检' : '消息查证') + '</span><span class="case-id">' + (state.inputType === 'image' ? '图片识别' : '拆解疑点') + '</span></div>' +
+          '<div class="bar-actions"></div>' +
+        '</div></header>' +
+        '<div class="wrap">' +
+          '<section class="card analyzing-card">' +
+            '<span class="scan-line"></span>' +
+            '<img class="am" src="/images/detective-avatar.png" alt="">' +
+            '<h2>正在拆解疑点…</h2>' +
+            '<p>' + (state.inputType === 'image' ? '先识别截图中的文字与画面线索，再提取可核查的主张、人物、时间与数字。' : '大模型正在提取可核查的主张、人物、时间与数字。') + '通常需要 10–30 秒。</p>' +
+            (state.draft.image && state.inputType === 'image' ? '<img class="thumb" src="' + state.draft.image + '" alt="截图">' : '') +
+            (sourceText ? '<p style="margin-top:10px">' + esc(clip(sourceText, 90)) + '</p>' : '') +
+            '<div class="dots"><i></i><i></i><i></i></div>' +
+            '<button class="btn btn-sm" data-act="cancel-analyze">取消</button>' +
+          '</section>' +
+        '</div>' +
+      '</div>';
+    }
+
+    var preview = state.preview;
+    if (!preview) {
+      state.screen = 'home';
+      return renderHome();
+    }
+    var selectedCount = Object.keys(state.selected).length;
+    var price = Number(preview.pricePerClaim) || 8;
+    var cost = selectedCount * price;
+    var claims = Array.isArray(preview.claims) ? preview.claims : [];
+    var insufficient = false; // 真实接口不在这里做本地余额拦截
+
+    return '' +
+    '<div class="claims-page">' +
+      '<header class="case-bar"><div class="wrap bar-inner">' +
+        '<button class="bar-home" data-act="back-home">' + ICONS.back + 'AI 侦探社</button>' +
+        '<div class="bar-meta"><span class="badge">' + (preview.mode === 'scriptcheck' ? '文案体检' : '消息查证') + '</span><span class="case-id">' + (preview.inputType === 'image' ? '图片立案' : '文字立案') + '</span></div>' +
+        '<div class="bar-actions"><span class="badge">免费拆疑点</span></div>' +
+      '</div></header>' +
+      '<div class="wrap claims-wrap">' +
+        '<div class="claims-head"><h1>免费拆疑点</h1><p>先找出最值得查的地方，再勾选要付费查证的疑点。每个疑点 ' + price + ' 积分。</p></div>' +
+        '<div class="claims-grid">' +
+          '<section class="card source-panel">' +
+            '<div class="panel-title">送检原文 <span>' + String(preview.input || '').length + ' 字</span></div>' +
+            (preview.inputType === 'image' && state.draft.image ? '<div class="thumb-row"><img src="' + state.draft.image + '" alt="截图"><span>图片已识别为下方文字</span></div>' : '') +
+            '<div class="source-text">' + highlightText(preview.input || '', claims) + '</div>' +
+            '<div class="legend"><span><i style="background:var(--red)"></i>高风险</span><span><i style="background:var(--orange)"></i>中风险</span><span><i style="background:var(--gray)"></i>低风险</span></div>' +
+          '</section>' +
+          '<section>' +
+            '<div class="pick-tools">' +
+              '<button class="btn btn-sm" data-act="select-high">只选高风险</button>' +
+              '<button class="btn btn-sm" data-act="select-all">全选</button>' +
+              '<button class="btn btn-sm" data-act="select-none">清空</button>' +
+            '</div>' +
+            '<div class="claim-list">' +
+              (claims.length ? claims.map(claimCard).join('') : '<div class="card empty">这段内容里没有拆出可核查的具体主张。可以返回换一段更具体的文字。</div>') +
+            '</div>' +
+          '</section>' +
+        '</div>' +
+      '</div>' +
+      '<div class="claims-bar"><div class="wrap claims-bar-inner">' +
+        '<div class="cost">' +
+          '<span class="free-tag">免费预检</span>' +
+          '<span>已选 <b>' + selectedCount + '</b> 个疑点 · 将扣 <b>' + cost + '</b> 积分</span>' +
+          '<span class="muted">' + claims.length + ' 个候选</span>' +
+        '</div>' +
+        '<div class="cost-actions">' +
+          '<button class="btn btn-sm" data-act="back-home">返回编辑</button>' +
+          '<button class="btn btn-primary" data-act="start-selected"' + (selectedCount === 0 ? ' disabled' : '') + '>开始查证</button>' +
+        '</div>' +
+      '</div></div>' +
+    '</div>';
+  }
+
+  /* ---------- 办案页 ---------- */
+  function stageInfo(run, key) {
+    var logs = run.logs.filter(function (log) { return log.stage === key; });
+    var started = logs.some(function (log) { return log.status === 'start'; });
+    var done = logs.some(function (log) { return log.status === 'done'; });
+    return { started: started, done: done, last: logs[logs.length - 1] || null };
+  }
+  function stageState(run, key) {
+    if (run.fromHistory) return 'done';
+    var info = stageInfo(run, key);
+    if (info.done) return 'done';
+    if (info.started) return run.status === 'running' ? 'active' : 'done';
+    if (run.status === 'done') return 'done';
+    return 'pending';
+  }
+  function stageMessage(run, key) {
+    var info = stageInfo(run, key);
+    if (info.last && info.last.message) return info.last.message;
+    if (run.fromHistory) {
+      switch (key) {
+        case 'claims': return '已拆出 ' + run.claims.length + ' 个疑点';
+        case 'search': return '共获得 ' + run.sources.length + ' 条候选来源';
+        case 'grade': return '完成 ' + run.sources.filter(function (s) { return !!s.tier; }).length + ' 条来源分级';
+        case 'cluster': return '合并为 ' + run.groups.filter(function (g) { return g.memberIds && g.memberIds.length > 1; }).length + ' 个同源组';
+        case 'trace': return '还原 ' + Object.keys(run.timelines || {}).filter(function (k) { return (run.timelines[k] || []).length > 0; }).length + ' 条时间线';
+        case 'verdict': return run.verdict ? '判决：' + VERDICTS[run.verdict.level].label : '未生成判决';
+        default: return '';
+      }
+    }
+    return '等待开始';
+  }
+  function stageColor(key) {
+    return { claims: 'var(--brand)', search: 'var(--blue)', grade: 'var(--orange)', cluster: 'var(--gray)', trace: 'var(--blue)', verdict: 'var(--brand)' }[key] || 'var(--gray)';
+  }
+
+  function sourceCard(run, source) {
+    var tier = source.tier ? TIERS[source.tier] : null;
+    var stance = source.stance ? STANCES[source.stance] : '';
+    var toggle = source.reachable === false;
+    var gs = groupSize(run, source);
+    return '<button class="source-card tier-' + (source.tier || 'unknown') + (toggle ? ' unreachable' : '') + '" data-act="open-source" data-id="' + esc(source.id) + '">' +
+      '<span class="sc-top">' +
+        (tier ? '<span class="badge tone-' + tier.cls + '">' + tier.label + '</span>' : '<span class="tag">待分级</span>') +
+        (stance ? '<span class="stance ' + source.stance + '">' + stance + '</span>' : '') +
+      '</span>' +
+      '<span class="sc-title">' + esc(titleLabel(source)) + '</span>' +
+      '<span class="sc-snippet">' + esc(clip(snippetLabel(source), 90)) + '</span>' +
+      '<span class="sc-foot"><span>' + esc(siteLabel(source)) + '</span><span>' + fmtDate(source.publishedAt) + '</span></span>' +
+      (source.reachable === false ? '<span class="sc-group" style="color:var(--red);background:var(--red-soft)">链接不可达</span>' : '') +
+      (source.isOrigin ? '<span class="sc-group">原始出处</span>' : '') +
+      (gs > 1 ? '<span class="sc-group">同源 ' + gs + ' 篇</span>' : '') +
+    '</button>';
+  }
+
+  function claimBlock(run, claim, index) {
+    var risk = RISKS[claim.riskLevel] || null;
+    var category = claim.category ? (CATS[claim.category] || '') : '';
+    var progress = run.claimProgress[claim.id];
+    var progressLabel = { queued: '排队中', searching: '搜证中', grading: '分级中', done: '已核查' }[progress] || '';
+    var sources = sourceListForClaim(run, claim.id);
+    var expanded = !!state.expanded[claim.id];
+    var shown = expanded ? sources : sources.slice(0, 7);
+    var rest = sources.length - shown.length;
+    var body = '';
+
+    if (sources.length === 0) {
+      body = (run.status === 'running')
+        ? '<div class="skeleton"></div><div class="skeleton"></div>'
+        : '<div class="empty-src">本次没有检索到可用来源。</div>';
+    } else {
+      body = shown.map(function (source) { return sourceCard(run, source); }).join('') +
+        (rest > 0 ? '<button class="more-card" data-act="expand-claim" data-id="' + esc(claim.id) + '">还有 ' + rest + ' 条来源<br>点击展开</button>' : '');
+    }
+
+    return '<div class="claim-block">' +
+      '<div class="claim-head">' +
+        '<span class="claim-no">疑点 ' + pad(index + 1) + '</span>' +
+        '<p>' + esc(claim.sentence || claim.text) + '</p>' +
+        '<span class="claim-tags">' +
+          (risk ? '<span class="badge ' + risk.cls + '">' + risk.label + '</span>' : '') +
+          (category ? '<span class="tag">' + esc(category) + '</span>' : '') +
+          (progressLabel ? '<span class="progress-chip ' + progress + '">' + progressLabel + '</span>' : '') +
+        '</span>' +
+      '</div>' +
+      '<div class="source-grid">' + body + '</div>' +
+    '</div>';
+  }
+
+  function renderTimeline(run) {
+    var stepsByClaim = run.timelines || {};
+    var claimIds = Object.keys(stepsByClaim).filter(function (id) { return (stepsByClaim[id] || []).length > 0; });
+    if (claimIds.length === 0) {
+      return '<section class="card timeline-card"><div class="panel-title">溯源时间线 <span>按发布时间还原</span></div>' +
+        (run.status === 'running' ? '<div class="skeleton" style="height:84px"></div>' : '<div class="empty-src">本次未还原出传播时间线。</div>') +
+      '</section>';
+    }
+    var active = state.timelineClaim;
+    if (!active || claimIds.indexOf(active) < 0) active = claimIds[0];
+    var tabs = claimIds.length > 1 ? '<div class="tl-tabs">' + claimIds.map(function (id) {
+      var claim = run.claims.filter(function (item) { return item.id === id; })[0];
+      return '<button data-act="timeline-tab" data-id="' + esc(id) + '" class="' + (id === active ? 'on' : '') + '">' + esc(clip(claim ? (claim.sentence || claim.text) : id, 16)) + '</button>';
+    }).join('') + '</div>' : '';
+    var steps = stepsByClaim[active] || [];
+    var stepsHtml = steps.map(function (step) {
+      var source = sourceOf(run, step.sourceId);
+      var mutated = step.mutation && step.mutation !== '原始出处';
+      return '<li class="tl-step' + (mutated ? ' mutated' : '') + '">' +
+        '<div class="tl-dot"></div>' +
+        '<div class="tl-date">' + fmtDate(step.publishedAt) + '</div>' +
+        '<div class="tl-site">' + esc(source ? siteLabel(source) : '来源不详') + '</div>' +
+        '<div class="tl-quote">' + esc(step.quote || '暂无摘录') + '</div>' +
+        (step.mutation ? '<div class="tl-mutation">' + esc(step.mutation) + '</div>' : '') +
+      '</li>';
+    }).join('');
+    return '<section class="card timeline-card">' +
+      '<div class="panel-title">溯源时间线 <span>' + steps.length + ' 步 · 看结论如何走样</span></div>' +
+      tabs + '<ol class="timeline">' + stepsHtml + '</ol>' +
+    '</section>';
+  }
+
+  function renderVerdict(run) {
+    if (run.status === 'terminated') {
+      return '<section class="card verdict-skeleton"><b>本次办案已中止</b><p>没有生成判决书，也没有产生费用。</p></section>';
+    }
+    if (!run.verdict) {
+      if (run.status === 'error') {
+        return '<section class="card verdict-skeleton"><b>未能生成判决</b><p>' + esc(run.fatal || '查证过程中出现错误') + '</p></section>';
+      }
+      return '<section class="card verdict-skeleton"><b>判决生成中…</b><p>证据齐备后会在这里给出五档判决。</p><div class="skeleton-line" style="width:70%;margin:8px auto"></div></section>';
+    }
+
+    var verdict = run.verdict;
+    var level = VERDICTS[verdict.level] || VERDICTS.unverified;
+    var percent = Math.round((Number(verdict.confidence) || 0) * 100);
+    var evidenceState = verdict.evidenceState === 'multi' ? '多方独立证据' : (verdict.evidenceState === 'single' ? '单一来源证据' : (verdict.evidenceState === 'none' ? '无独立证据' : ''));
+
+    var rows = (verdict.claims || []).map(function (item) {
+      var claim = run.claims.filter(function (c) { return c.id === item.claimId; })[0];
+      var itemLevel = VERDICTS[item.level] || VERDICTS.unverified;
+      var citations = (item.citationIds || []).map(function (id) { return sourceOf(run, id); }).filter(Boolean);
+      var scriptLabel = item.scriptLabel ? (SCRIPT_LABELS[item.scriptLabel] || item.scriptLabel) : '';
+      return '<div class="cv-row">' +
+        '<span class="badge tone-' + itemLevel.cls + '">' + itemLevel.label + '</span>' +
+        '<div class="cv-main">' +
+          '<p>' + esc(claim ? (claim.sentence || claim.text) : item.claimId) + '</p>' +
+          '<small>' + esc(item.summary || '') + ' · 置信度 ' + Math.round((Number(item.confidence) || 0) * 100) + '%</small>' +
+          ((scriptLabel || item.rewrite || item.conflict) ? '<div class="cv-extra">' +
+            (scriptLabel ? '<span class="tag">标签：' + esc(scriptLabel) + '</span>' : '') +
+            (item.conflict ? '<span class="tag">冲突：支持 ' + item.conflict.supportIds.length + ' / 反驳 ' + item.conflict.refuteIds.length + '</span>' : '') +
+          '</div>' : '') +
+          (item.rewrite ? '<div class="cv-extra"><span class="tag">改写：' + esc(item.rewrite) + '</span></div>' : '') +
+          (item.conflict ? '<small>' + esc(item.conflict.resolution || '') + '</small>' : '') +
+          (citations.length ? '<div class="cv-cites">' + citations.map(function (source) {
+            return '<button class="cite" data-act="open-source" data-id="' + esc(source.id) + '">' + esc(siteLabel(source)) + '</button>';
+          }).join('') + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    if (!rows && run.claims.length === 0) rows = '<div class="empty-src">本次没有可核查的疑点。</div>';
+
+    return '<section class="card verdict-card" id="verdict-anchor">' +
+      '<div class="verdict-head">' +
+        '<div class="stamp" style="background:' + level.color + '">' + level.label + '</div>' +
+        '<div class="vh-main">' +
+          '<div class="vh-kicker">' + (run.mode === 'scriptcheck' ? '文案体检 · 结案' : '消息查证 · 结案') + '</div>' +
+          '<h2>' + esc(verdict.headline || level.label) + '</h2>' +
+          '<p>' + esc(verdict.summary || '') + '</p>' +
+          '<div class="conf"><span>置信度 ' + percent + '%</span><div class="conf-bar"><i style="width:' + percent + '%"></i></div>' +
+            (evidenceState ? '<span class="evidence-state">' + evidenceState + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="claim-verdicts">' + rows + '</div>' +
+      (verdict.rebuttalCard ? '<div class="rebuttal">' +
+        '<h4>可转发 · 辟谣卡</h4>' +
+        '<b>' + esc(verdict.rebuttalCard.title) + '</b>' +
+        '<p>' + esc(verdict.rebuttalCard.body) + '</p>' +
+        '<div class="rb-actions">' +
+          '<button class="btn btn-sm" data-act="copy-rebuttal">复制辟谣卡</button>' +
+          '<button class="btn btn-sm" data-act="export-md">' + ICONS.doc + '导出 Markdown</button>' +
+          '<a class="btn btn-sm" href="/api/report/' + encodeURIComponent(run.caseId || '') + '?format=md" target="_blank" rel="noopener">服务端报告</a>' +
+          '<button class="btn btn-sm btn-primary" data-act="home">再查一条</button>' +
+        '</div>' +
+      '</div>' : '') +
+    '</section>';
+  }
+
+  function renderCase() {
+    var run = state.run;
+    if (!run) { state.screen = 'home'; return renderHome(); }
+
+    var running = run.status === 'running';
+    var statusText = running
+      ? '进行中 · <span id="elapsed">' + fmtClock(Date.now() - run.startedAt) + '</span>'
+      : (run.status === 'done' ? (run.fromHistory ? '已归档' : '已结案 · 用时 ' + fmtClock(run.closedAt - run.startedAt))
+        : (run.status === 'terminated' ? '已中止' : '查证失败'));
+
+    var stagesHtml = STAGES.map(function (stage, index) {
+      var status = stageState(run, stage.key);
+      return '<li class="stage ' + status + '">' +
+        '<span class="stage-no" style="' + (status === 'done' ? '' : '') + '">' + (status === 'done' ? '✓' : (index + 1)) + '</span>' +
+        '<span class="stage-body"><b>' + stage.label + '</b><small>' + esc(stageMessage(run, stage.key)) + '</small></span>' +
+      '</li>';
+    }).join('');
+
+    var recentLogs = (run.logs || []).slice(-6);
+    var feedHtml = recentLogs.length ? '<ul class="feed">' + recentLogs.map(function (log) {
+      var label = (STAGES.filter(function (stage) { return stage.key === log.stage; })[0] || {}).label || log.stage;
+      return '<li class="' + log.status + '"><time>' + fmtClock(log.at - run.startedAt) + '</time><span>' + esc(label + ' · ' + log.message) + '</span></li>';
+    }).join('') + '</ul>' : '<div class="empty-src">等待立案事件…</div>';
+
+    var statsHtml = run.stats ? '<div class="card side-card"><div class="panel-title">本次查证</div><div class="stats-grid">' +
+      '<div class="stat"><b>' + (run.stats.apiCalls || 0) + '</b><span>API 调用</span></div>' +
+      '<div class="stat"><b>' + (run.stats.sourcesVisited || 0) + '</b><span>访问来源</span></div>' +
+      '<div class="stat"><b>' + (run.stats.independentWitnesses || 0) + '</b><span>独立证人</span></div>' +
+      '<div class="stat"><b>' + ((run.stats.durationMs || 0) / 1000).toFixed(1) + 's</b><span>查证耗时</span></div>' +
+    '</div></div>' : '';
+
+    var billingHtml = run.billing ? '<div class="card side-card"><div class="panel-title">结算</div>' +
+      '<div class="billing-line"><span>单价</span><b>' + (run.billing.pricePerClaim || 8) + ' 积分 / 疑点</b></div>' +
+      '<div class="billing-line"><span>查证疑点</span><b>' + ((run.billing.checkedClaimIds || []).length) + ' 个</b></div>' +
+      '<div class="billing-line"><span>扣除</span><b>' + (run.billing.charged || 0) + ' 积分</b></div>' +
+      '<div class="billing-line"><span>退回</span><b>' + (run.billing.refunded || 0) + ' 积分</b></div>' +
+      '<div class="billing-line"><span>实际净扣</span><b>' + ((run.billing.charged || 0) - (run.billing.refunded || 0)) + ' 积分</b></div>' +
+      ((run.billing.refundClaimIds || []).length ? '<p class="side-note">' + (run.billing.refundClaimIds.length) + ' 个疑点无可核对证据或未完成核查，已部分退款。</p>' : '') +
+    '</div>' : '';
+
+    var errorBanner = (run.status === 'error' && run.fatal)
+      ? '<div class="banner banner-error"><span>' + esc(run.fatal) + '</span><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm" data-act="retry-run">重试</button><button class="btn btn-sm" data-act="home">返回首页</button></span></div>'
+      : '';
+    var terminatedBanner = run.status === 'terminated'
+      ? '<div class="banner banner-terminated"><span>本次办案已中止，所有在途请求已取消，本次未产生费用。</span><button class="btn btn-sm" data-act="home">返回首页重新立案</button></div>'
+      : '';
+    var warnBanner = (run.status === 'running' && run.errors.length)
+      ? '<div class="banner banner-warn"><span>' + esc(run.errors[run.errors.length - 1]) + '（可恢复，继续查证中）</span></div>'
+      : '';
+
+    var claimsHtml = run.claims.length
+      ? run.claims.map(function (claim, index) { return claimBlock(run, claim, index); }).join('')
+      : (run.status === 'running' ? '<div class="skeleton"></div><div class="skeleton" style="margin-top:10px"></div>' : '<div class="empty-src">本次没有拆出可核查的疑点。</div>');
+
+    var groupCount = run.groups.filter(function (group) { return group.memberIds && group.memberIds.length > 1; }).length;
+
+    return '' +
+    '<div class="case-page">' +
+      '<header class="case-bar"><div class="wrap bar-inner">' +
+        '<button class="bar-home" data-act="home">' + ICONS.back + 'AI 侦探社</button>' +
+        '<div class="bar-meta">' +
+          '<span class="case-id">' + esc(run.caseId || '等待案件编号') + '</span>' +
+          '<span class="badge">' + (run.mode === 'scriptcheck' ? '文案体检' : '消息查证') + '</span>' +
+          (run.inputImage ? '<span class="badge">图片立案</span>' : '') +
+          (run.fromHistory ? '<span class="badge">本机卷宗</span>' : '') +
+        '</div>' +
+        '<div class="bar-actions">' +
+          '<span class="status-line">' + (running ? '<span class="live-dot"></span>' : '') + statusText + '</span>' +
+          (running ? '<button class="btn btn-danger" data-act="terminate">■ 中止</button>' : '') +
+        '</div>' +
+      '</div></header>' +
+
+      '<div class="wrap case-wrap">' +
+        errorBanner + terminatedBanner + warnBanner +
+        '<div class="case-grid">' +
+          '<aside class="side">' +
+            '<div class="card side-card">' +
+              '<div class="panel-title">报案内容 <span>' + fmtDate(run.createdAt) + '</span></div>' +
+              '<div class="case-input">' + esc(run.input) + '</div>' +
+              (run.inputImage ? '<img class="case-thumb" src="' + run.inputImage + '" alt="立案截图">' : '') +
+              '<div class="case-input-meta"><span class="tag">' + run.claims.length + ' 个疑点</span><span class="tag">' + run.sources.length + ' 条来源</span>' + (groupCount ? '<span class="tag">' + groupCount + ' 个同源组</span>' : '') + '</div>' +
+            '</div>' +
+            '<div class="card side-card">' +
+              '<div class="panel-title">查证进度 ' + (running ? '<span class="live-tag">进行中</span>' : '<span>' + (run.status === 'done' ? '已结案' : '已结束') + '</span>') + '</div>' +
+              '<ol class="stages">' + stagesHtml + '</ol>' +
+            '</div>' +
+            '<div class="card side-card"><div class="panel-title">办案播报</div>' + feedHtml + '</div>' +
+            statsHtml +
+            billingHtml +
+          '</aside>' +
+          '<div class="main">' +
+            '<section class="card evidence-card">' +
+              '<div class="evidence-top"><h2>证据墙</h2><span>' + run.sources.length + ' 条来源 · ' + groupCount + ' 个同源组</span></div>' +
+              claimsHtml +
+            '</section>' +
+            renderTimeline(run) +
+            renderVerdict(run) +
+            (run.verdict ? '<p class="foot">判决依据 ' + run.sources.length + ' 条来源生成 · 点击来源卡片查看摘录与链接</p>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ---------- 覆盖层 ---------- */
+  function renderOverlays() {
+    var html = '';
+    var run = state.run;
+    if (state.drawer && run) {
+      var source = sourceOf(run, state.drawer.sourceId);
+      if (source) {
+        var tier = source.tier ? TIERS[source.tier] : null;
+        var group = groupFor(run, source);
+        var members = group && group.memberIds ? group.memberIds.map(function (id) { return sourceOf(run, id); }).filter(Boolean) : [];
+        var claim = run.claims.filter(function (item) { return item.id === source.claimId; })[0];
+        html += '<div class="scrim" data-act="close-drawer"></div><aside class="drawer" role="dialog" aria-label="来源详情">' +
+          '<div class="drawer-head"><h3>来源详情</h3><button class="icon-btn" data-act="close-drawer" aria-label="关闭">' + ICONS.close + '</button></div>' +
+          '<div class="drawer-site">' +
+            (tier ? '<span class="badge tone-' + tier.cls + '">' + tier.label + '</span>' : '<span class="tag">待分级</span>') +
+            '<span>' + esc(siteLabel(source)) + '</span>' +
+            (source.stance ? '<span class="stance ' + source.stance + '">' + STANCES[source.stance] + '</span>' : '') +
+            (source.reachable === false ? '<span class="badge tone-false">链接不可达</span>' : '') +
+          '</div>' +
+          '<div class="drawer-title">' + esc(titleLabel(source)) + '</div>' +
+          '<div class="drawer-snippet">' + esc(snippetLabel(source)) + '</div>' +
+          '<div class="drawer-meta">' +
+            '<div><span>对应疑点</span><b>' + esc(claim ? clip(claim.sentence || claim.text, 26) : '—') + '</b></div>' +
+            '<div><span>发布时间</span><b>' + fmtDateTime(source.publishedAt) + '</b></div>' +
+            '<div><span>检索方向</span><b>' + (source.direction === 'pro' ? '正方检索' : (source.direction === 'con' ? '反方检索' : '—')) + '</b></div>' +
+            '<div><span>检索式</span><b>' + esc(clip(source.query || '—', 34)) + '</b></div>' +
+            (group && members.length > 1 ? '<div><span>同源组</span><b>' + members.length + ' 篇（合并计为 1 个证人）</b></div>' : '') +
+          '</div>' +
+          (isSafeUrl(source.url) && source.reachable !== false
+            ? '<a class="drawer-link" href="' + esc(source.url) + '" target="_blank" rel="noopener noreferrer">打开原始链接 ↗</a>'
+            : '<p class="side-note">原始链接不可用或未通过校验。</p>') +
+          (members.length > 1 ? '<div class="group-box"><h4>同源转载</h4>' + members.map(function (member) {
+            return '<button data-act="switch-source" data-id="' + esc(member.id) + '">' + (member.id === source.id ? '● ' : '') + esc(clip(titleLabel(member), 30)) + ' · ' + esc(siteLabel(member)) + '</button>';
+          }).join('') + '</div>' : '') +
+        '</aside>';
+      }
+    }
+    if (state.modal) {
+      html += '<div class="modal-wrap"><div class="scrim" data-act="modal-cancel"></div><div class="modal card" role="dialog" aria-modal="true">' +
+        '<h3>' + esc(state.modal.title) + '</h3><p>' + esc(state.modal.body) + '</p>' +
+        '<div class="modal-actions">' +
+          (state.modal.cancelText !== null ? '<button class="btn" data-act="modal-cancel">' + esc(state.modal.cancelText || '取消') + '</button>' : '') +
+          '<button class="btn ' + (state.modal.danger ? 'btn-danger' : 'btn-primary') + '" data-act="modal-ok">' + esc(state.modal.okText || '确定') + '</button>' +
+        '</div></div></div>';
+    }
+    $('#overlays').innerHTML = html;
+  }
+
+  /* ---------- 交互工具 ---------- */
+  var toastTimer = null;
+  function toast(message) {
+    var element = $('#toast');
+    element.textContent = message;
+    element.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { element.classList.remove('show'); }, 2400);
+  }
+  function openModal(options) {
+    state.modal = {
+      title: options.title,
+      body: options.body,
+      okText: options.okText,
+      cancelText: options.cancelText === undefined ? '取消' : options.cancelText,
+      danger: !!options.danger,
+      onOk: options.onOk || function () {}
+    };
+    renderOverlays();
+  }
+  function closeModal() { state.modal = null; renderOverlays(); }
+  function closeDrawer() { state.drawer = null; renderOverlays(); }
+  function go(screen) { state.screen = screen; window.scrollTo(0, 0); render(); }
+
+  function startElapsedTimer() {
+    stopElapsedTimer();
+    state.elapsedTimer = setInterval(function () {
+      var element = $('#elapsed');
+      if (!element || !state.run || state.run.status !== 'running') return;
+      element.textContent = fmtClock(Date.now() - state.run.startedAt);
+    }, 1000);
+  }
+  function stopElapsedTimer() {
+    if (state.elapsedTimer) { clearInterval(state.elapsedTimer); state.elapsedTimer = null; }
+  }
+
+  /* ---------- 图片压缩 ---------- */
+  function compressImage(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = function () { reject(new Error('图片读取失败')); };
+      reader.onload = function () {
+        var image = new Image();
+        image.onerror = function () { reject(new Error('图片解析失败')); };
+        image.onload = function () {
+          var maxEdge = 1600;
+          var width = image.naturalWidth;
+          var height = image.naturalHeight;
+          var scale = Math.min(1, maxEdge / Math.max(width, height));
+          var canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(width * scale));
+          canvas.height = Math.max(1, Math.round(height * scale));
+          var context = canvas.getContext('2d');
+          context.fillStyle = '#ffffff';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          var quality = 0.86;
+          var dataUrl = canvas.toDataURL('image/jpeg', quality);
+          while (dataUrl.length * 0.75 > 1024 * 1024 && quality > 0.4) {
+            quality -= 0.08;
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+          resolve({
+            dataUrl: dataUrl,
+            width: canvas.width,
+            height: canvas.height,
+            bytes: Math.round(dataUrl.length * 0.75)
+          });
+        };
+        image.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /* ---------- 拆疑点请求 ---------- */
+  function requestPreview(body, meta) {
+    state.analyzing = true;
+    state.preview = null;
+    state.selected = {};
+    state.screen = 'preview';
+    state.error = '';
+    window.scrollTo(0, 0);
+    render();
+
+    var controller = new AbortController();
+    state.analyzeCtrl = controller;
+    var timer = setTimeout(function () { controller.abort(); }, 120000);
+
+    fetch('/api/extract-claims', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    }).then(function (response) {
+      return response.json().catch(function () { return null; }).then(function (data) {
+        if (!response.ok) {
+          throw new ApiError(response.status, (data && (data.message || data.error)) || ('接口返回 HTTP ' + response.status));
+        }
+        return data;
+      });
+    }).then(function (preview) {
+      if (state.analyzeCtrl !== controller) return;
+      state.preview = preview;
+      state.analyzing = false;
+      state.selected = {};
+      (preview.claims || []).forEach(function (claim) {
+        if (claim.riskLevel === 'high') state.selected[claim.id] = true;
+      });
+      if (!Object.keys(state.selected).length && preview.claims && preview.claims.length === 1) {
+        state.selected[preview.claims[0].id] = true;
+      }
+      render();
+    }).catch(function (error) {
+      if (state.analyzeCtrl !== controller) return;
+      state.analyzing = false;
+      state.preview = null;
+      state.screen = meta.returnScreen || 'home';
+      state.error = error && error.name === 'AbortError'
+        ? '拆疑点请求超时或已取消，请重试。'
+        : (error && error.message ? error.message : '拆疑点失败，请重试。');
+      render();
+      toast(state.error);
+    }).finally(function () {
+      clearTimeout(timer);
+      if (state.analyzeCtrl === controller) state.analyzeCtrl = null;
+    });
+  }
+
+  function handleSubmit() {
+    state.error = '';
+    if (state.inputType === 'link') {
+      state.error = '链接立案尚未接入，请切换到「文字」粘贴正文。';
+      render();
+      return;
+    }
+    if (state.inputType === 'image') {
+      if (!state.draft.image) {
+        state.error = '请先上传一张截图。';
+        render();
+        return;
+      }
+      requestPreview({ mode: state.mode, inputType: 'image', image: state.draft.image }, { returnScreen: 'home' });
+      return;
+    }
+    var text = state.draft.text.trim();
+    var min = state.mode === 'scriptcheck' ? 50 : 4;
+    var max = state.mode === 'scriptcheck' ? 1500 : 500;
+    if (text.length < min) {
+      state.error = state.mode === 'scriptcheck' ? '文案体检至少 50 个字，请把整段文案贴进来。' : '至少输入 4 个字。';
+      render();
+      return;
+    }
+    if (text.length > max) {
+      state.error = '最多 ' + max + ' 个字。';
+      render();
+      return;
+    }
+    if (state.mode === 'factcheck') {
+      startCase({ inputType: 'text', text: text, mode: 'factcheck' }, { mode: 'factcheck', input: text });
+      return;
+    }
+    requestPreview({ mode: 'scriptcheck', inputType: 'text', text: text }, { returnScreen: 'home' });
+  }
+
+  /* ---------- 立案与事件流 ---------- */
+  function startCase(body, meta) {
+    if (state.run && state.run.controller) {
+      try { state.run.controller.abort(); } catch (e) {}
+    }
+    stopElapsedTimer();
+    var run = newRun(meta || {});
+    run.lastBody = body;
+    state.run = run;
+    state.screen = 'case';
+    state.expanded = {};
+    state.timelineClaim = null;
+    state.drawer = null;
+    state.modal = null;
+    window.scrollTo(0, 0);
+    render();
+    startElapsedTimer();
+    consumeStream(body, run);
+  }
+
+  function consumeStream(body, run) {
+    var controller = new AbortController();
+    run.controller = controller;
+    var timeout = setTimeout(function () {
+      run.timedOut = true;
+      try { controller.abort(); } catch (e) {}
+    }, 165000);
+
+    fetch('/api/investigate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    }).then(function (response) {
+      if (!response.ok) {
+        return response.json().catch(function () { return null; }).then(function (data) {
+          throw new ApiError(response.status, (data && (data.message || data.error)) || ('立案失败（HTTP ' + response.status + '）'));
+        });
+      }
+      if (!response.body) throw new Error('响应没有事件流');
+      var reader = response.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      function pump() {
+        return reader.read().then(function (result) {
+          if (result.done) return;
+          buffer += decoder.decode(result.value, { stream: true });
+          buffer = drainSse(buffer, function (event) {
+            applyEvent(run, event);
+            if (event.type === 'done') {
+              stopElapsedTimer();
+              scheduleRender();
+              setTimeout(function () {
+                var element = $('#verdict-anchor');
+                if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 240);
+            } else if (event.type === 'verdict' || event.type === 'source' || event.type === 'source_update' ||
+                       event.type === 'groups' || event.type === 'stage' || event.type === 'claims' ||
+                       event.type === 'stats' || event.type === 'billing' || event.type === 'error') {
+              scheduleRender();
+            }
+          });
+          return pump();
+        });
+      }
+      return pump().then(function () {
+        buffer += decoder.decode();
+        if (buffer.trim() !== '') drainSse(buffer + '\n\n', function (event) { applyEvent(run, event); });
+        scheduleRender();
+        if (run.status === 'running' && !run.terminated) {
+          run.status = 'error';
+          run.fatal = '事件流意外结束，没有等到结案报告。';
+          run.closedAt = Date.now();
+          stopElapsedTimer();
+          scheduleRender();
+        }
+      });
+    }).catch(function (error) {
+      if (run.terminated) return;
+      if (run.status === 'done') return;
+      if (error && error.name === 'AbortError') {
+        if (run.timedOut) {
+          run.status = 'error';
+          run.fatal = '查证超时：服务端在 150 秒内没有返回完整结案报告，请稍后重试。';
+        } else if (!run.terminated) {
+          run.status = 'error';
+          run.fatal = '事件流已中断。';
+        }
+      } else {
+        run.status = 'error';
+        run.fatal = error instanceof ApiError
+          ? error.message
+          : (error instanceof TypeError ? '网络连接中断，请确认本地服务仍在运行。' : (error && error.message) || '立案失败。');
+      }
+      run.closedAt = Date.now();
+      stopElapsedTimer();
+      scheduleRender();
+    }).finally(function () {
+      clearTimeout(timeout);
+      if (run.controller === controller) run.controller = null;
+    });
+  }
+
+  function terminateRun() {
+    var run = state.run;
+    if (!run || run.status !== 'running') return;
+    run.terminated = true;
+    run.status = 'terminated';
+    run.closedAt = Date.now();
+    if (run.controller) { try { run.controller.abort(); } catch (e) {} }
+    stopElapsedTimer();
+    state.modal = null;
+    render();
+    toast('已中止，在途请求已取消');
+  }
+
+  /* ---------- 导出 Markdown ---------- */
+  function mdFromCaseFile(caseFile) {
+    if (!caseFile) return '';
+    var lines = [];
+    var modeLabel = caseFile.mode === 'scriptcheck' ? '文案体检' : '消息查证';
+    lines.push('# AI 侦探社 · ' + (caseFile.mode === 'scriptcheck' ? '文案体检报告' : '查证报告'), '');
+    lines.push('- 案件编号：' + caseFile.id);
+    lines.push('- 生成时间：' + fmtDateTime(caseFile.createdAt));
+    lines.push('- 模式：' + modeLabel);
+    lines.push('- 原始输入：' + String(caseFile.input || '').replace(/\s+/g, ' ').trim(), '');
+    var verdict = caseFile.verdict;
+    lines.push('## 结论', '');
+    if (verdict) {
+      lines.push('**' + (VERDICTS[verdict.level] || {}).label + '**：' + verdict.headline, '');
+      lines.push(verdict.summary || '', '');
+      lines.push('置信度 ' + Math.round((Number(verdict.confidence) || 0) * 100) + '%', '');
+    } else {
+      lines.push('本次未能生成判决结论。', '');
+    }
+    var sourceById = {};
+    (caseFile.sources || []).forEach(function (source) { sourceById[source.id] = source; });
+    lines.push('## 疑点结论', '');
+    (caseFile.claims || []).forEach(function (claim, index) {
+      var item = (verdict && verdict.claims || []).filter(function (entry) { return entry.claimId === claim.id; })[0];
+      lines.push('### ' + (index + 1) + '. ' + (claim.sentence || claim.text), '');
+      if (!item) {
+        lines.push('- 判决：本次未生成结论', '');
+        return;
+      }
+      lines.push('- 判决：' + (VERDICTS[item.level] || {}).label + '（置信度 ' + Math.round((Number(item.confidence) || 0) * 100) + '%）');
+      lines.push('- 说明：' + (item.summary || ''));
+      if (item.scriptLabel) lines.push('- 标签：' + (SCRIPT_LABELS[item.scriptLabel] || item.scriptLabel));
+      if (item.rewrite) lines.push('- 改写建议：' + item.rewrite);
+      (item.citationIds || []).forEach(function (id) {
+        var source = sourceById[id];
+        if (source) lines.push('- 来源：[' + titleLabel(source) + '](<' + source.url + '>) · ' + siteLabel(source));
+      });
+      lines.push('');
+    });
+    lines.push('## 来源列表', '');
+    (caseFile.sources || []).forEach(function (source) {
+      lines.push('- [' + (source.tier ? TIERS[source.tier].label : '未分级') + '] [' + titleLabel(source) + '](<' + source.url + '>) · ' + siteLabel(source) + ' · ' + fmtDate(source.publishedAt));
+    });
+    lines.push('', '## 传播时间线', '');
+    var timelineCount = 0;
+    (caseFile.claims || []).forEach(function (claim) {
+      var steps = (caseFile.timelines || {})[claim.id] || [];
+      if (!steps.length) return;
+      timelineCount += 1;
+      lines.push('### ' + (claim.sentence || claim.text), '');
+      steps.forEach(function (step, index) {
+        var source = sourceById[step.sourceId];
+        lines.push((index + 1) + '. ' + fmtDateTime(step.publishedAt) + ' · ' + (source ? siteLabel(source) : step.sourceId));
+        lines.push('> ' + (step.quote || '').replace(/\n/g, '\n> '));
+        if (step.mutation) lines.push('- 变形：' + step.mutation);
+        lines.push('');
+      });
+    });
+    if (!timelineCount) lines.push('本次未还原出传播时间线。');
+    if (caseFile.billing) {
+      lines.push('', '## 结算', '');
+      lines.push('- 单价：' + caseFile.billing.pricePerClaim + ' 积分 / 疑点');
+      lines.push('- 查证疑点：' + (caseFile.billing.checkedClaimIds || []).length + ' 个');
+      lines.push('- 扣除：' + (caseFile.billing.charged || 0) + ' 积分');
+      lines.push('- 退回：' + (caseFile.billing.refunded || 0) + ' 积分');
+    }
+    if (verdict && verdict.rebuttalCard) {
+      lines.push('', '## 辟谣卡', '', verdict.rebuttalCard.title, '', verdict.rebuttalCard.body);
+    }
+    return lines.join('\n').trimEnd() + '\n';
+  }
+
+  function exportMarkdown() {
+    var run = state.run;
+    if (!run) return;
+    var caseFile = run.caseFile || {
+      id: run.caseId || 'local-case',
+      input: run.input,
+      mode: run.mode,
+      createdAt: new Date(run.startedAt).toISOString(),
+      claims: run.claims,
+      sources: run.sources,
+      groups: run.groups,
+      timelines: run.timelines,
+      verdict: run.verdict,
+      stats: run.stats,
+      billing: run.billing
+    };
+    var markdown = mdFromCaseFile(caseFile);
+    var blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    var anchor = document.createElement('a');
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = '查证报告-' + (caseFile.id || 'local-case') + '.md';
+    document.body.appendChild(anchor);
+    anchor.click();
+    setTimeout(function () { URL.revokeObjectURL(anchor.href); anchor.remove(); }, 400);
+    toast('Markdown 报告已导出');
+  }
+
+  function copyRebuttal() {
+    var run = state.run;
+    if (!run || !run.verdict || !run.verdict.rebuttalCard) return;
+    var card = run.verdict.rebuttalCard;
+    var level = (VERDICTS[run.verdict.level] || {}).label || '';
+    var text = card.title + '\n' + card.body + '\n—— AI 侦探社 · 判决：' + level + '（置信度 ' + Math.round((Number(run.verdict.confidence) || 0) * 100) + '%）';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast('辟谣卡已复制'); }).catch(function () { fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+  function fallbackCopy(text) {
+    try {
+      var textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+      toast('辟谣卡已复制');
+    } catch (e) { toast('复制失败，请手动选择文字'); }
+  }
+
+  /* ---------- 事件绑定 ---------- */
+  document.addEventListener('click', function (event) {
+    var target = event.target.closest('[data-act]');
+    if (!target) return;
+    var act = target.getAttribute('data-act');
+    var id = target.getAttribute('data-id');
+
+    if (act === 'mode') {
+      if (state.mode === id) return;
+      state.mode = id;
+      state.error = '';
+      render();
+      return;
+    }
+    if (act === 'input-type') {
+      state.inputType = id;
+      state.error = '';
+      render();
+      return;
+    }
+    if (act === 'example') {
+      var list = EXAMPLES[state.mode] || [];
+      if (list[Number(id)]) {
+        state.draft.text = list[Number(id)];
+        state.error = '';
+        render();
+        var textarea = $('#intake-text');
+        if (textarea) { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); }
+      }
+      return;
+    }
+    if (act === 'submit') { handleSubmit(); return; }
+    if (act === 'clear-image') {
+      state.draft.image = '';
+      state.draft.imageMeta = null;
+      render();
+      return;
+    }
+    if (act === 'home') {
+      if (state.run && state.run.status === 'running') {
+        openModal({
+          title: '中止查证并返回首页？',
+          body: '返回首页会中止本次查证，在途的搜索与模型请求会立即取消，本次不计费。',
+          okText: '中止并返回',
+          danger: true,
+          onOk: function () {
+            terminateRun();
+            state.run = null;
+            state.modal = null;
+            state.draft.text = '';
+            state.draft.url = '';
+            state.draft.image = '';
+            state.draft.imageMeta = null;
+            state.preview = null;
+            state.selected = {};
+            state.screen = 'home';
+            render();
+            window.scrollTo(0, 0);
+          }
+        });
+        return;
+      }
+      state.draft.text = '';
+      state.draft.url = '';
+      state.draft.image = '';
+      state.draft.imageMeta = null;
+      state.preview = null;
+      state.selected = {};
+      state.error = '';
+      state.run = null;
+      state.screen = 'home';
+      scheduleRender();
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (act === 'back-home') { state.preview = null; state.selected = {}; state.screen = 'home'; render(); window.scrollTo(0, 0); return; }
+    if (act === 'cancel-analyze') {
+      if (state.analyzeCtrl) { try { state.analyzeCtrl.abort(); } catch (e) {} }
+      state.analyzeCtrl = null;
+      state.analyzing = false;
+      state.preview = null;
+      state.screen = 'home';
+      state.error = '';
+      render();
+      return;
+    }
+    if (act === 'toggle-claim') {
+      if (state.selected[id]) delete state.selected[id];
+      else {
+        if (Object.keys(state.selected).length >= 10) { toast('单次最多查证 10 个疑点'); return; }
+        state.selected[id] = true;
+      }
+      render();
+      return;
+    }
+    if (act === 'select-high') {
+      state.selected = {};
+      ((state.preview && state.preview.claims) || []).forEach(function (claim) {
+        if (claim.riskLevel === 'high' && Object.keys(state.selected).length < 10) state.selected[claim.id] = true;
+      });
+      render();
+      return;
+    }
+    if (act === 'select-all') {
+      state.selected = {};
+      ((state.preview && state.preview.claims) || []).slice(0, 10).forEach(function (claim) { state.selected[claim.id] = true; });
+      if (state.preview && state.preview.claims.length > 10) toast('最多同时查证 10 个疑点');
+      render();
+      return;
+    }
+    if (act === 'select-none') { state.selected = {}; render(); return; }
+    if (act === 'start-selected') {
+      var preview = state.preview;
+      if (!preview) return;
+      var ids = Object.keys(state.selected);
+      if (!ids.length) { toast('请至少勾选一个疑点'); return; }
+      var body = {
+        mode: preview.mode,
+        inputType: 'text',
+        text: preview.input,
+        previewId: preview.previewId,
+        selectedClaimIds: ids
+      };
+      startCase(body, { mode: preview.mode, input: preview.input, inputImage: preview.inputType === 'image' ? state.draft.image : null });
+      return;
+    }
+    if (act === 'open-history') {
+      var caseFile = (state.history || []).filter(function (item) { return item.id === id; })[0];
+      if (!caseFile) { toast('找不到该卷宗'); return; }
+      stopElapsedTimer();
+      state.run = runFromCaseFile(caseFile);
+      state.expanded = {};
+      state.timelineClaim = null;
+      state.screen = 'case';
+      window.scrollTo(0, 0);
+      render();
+      return;
+    }
+    if (act === 'clear-history') {
+      openModal({
+        title: '清空本机历史卷宗？',
+        body: '只会删除浏览器里保存的卷宗记录，不会删除服务端已生成的报告。',
+        okText: '确认清空',
+        danger: true,
+        onOk: function () {
+          try { localStorage.removeItem(HISTORY_KEY); } catch (e) {}
+          state.history = [];
+          state.modal = null;
+          render();
+          toast('历史卷宗已清空');
+        }
+      });
+      return;
+    }
+    if (act === 'terminate') {
+      openModal({
+        title: '中止本次查证？',
+        body: '会立即取消在途的搜索与模型请求。服务端会按未完成处理，本次不计费。',
+        okText: '确认中止',
+        danger: true,
+        onOk: terminateRun
+      });
+      return;
+    }
+    if (act === 'retry-run') {
+      if (!state.run || !state.run.lastBody) return;
+      startCase(state.run.lastBody, { mode: state.run.mode, input: state.run.input, inputImage: state.run.inputImage });
+      return;
+    }
+    if (act === 'expand-claim') { state.expanded[id] = true; render(); return; }
+    if (act === 'timeline-tab') { state.timelineClaim = id; render(); return; }
+    if (act === 'open-source') { state.drawer = { sourceId: id }; renderOverlays(); return; }
+    if (act === 'switch-source') { state.drawer = { sourceId: id }; renderOverlays(); return; }
+    if (act === 'close-drawer') { closeDrawer(); return; }
+    if (act === 'copy-rebuttal') { copyRebuttal(); return; }
+    if (act === 'export-md') { exportMarkdown(); return; }
+    if (act === 'modal-ok') {
+      var callback = state.modal && state.modal.onOk;
+      state.modal = null;
+      if (callback) callback();
+      renderOverlays();
+      return;
+    }
+    if (act === 'modal-cancel') { closeModal(); return; }
+  });
+
+  document.addEventListener('input', function (event) {
+    if (event.target.id === 'intake-text') {
+      state.draft.text = event.target.value;
+      var counter = $('#char-count');
+      if (counter) {
+        var max = state.mode === 'scriptcheck' ? 1500 : 500;
+        counter.textContent = state.draft.text.length + ' / ' + max;
+      }
+    } else if (event.target.id === 'link-url') {
+      state.draft.url = event.target.value;
+    }
+  });
+
+  document.addEventListener('change', function (event) {
+    if (event.target.id !== 'image-file') return;
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { toast('请选择图片文件'); return; }
+    if (file.size > 12 * 1024 * 1024) { toast('图片不要超过 12MB'); return; }
+    toast('正在压缩截图…');
+    compressImage(file).then(function (result) {
+      state.draft.image = result.dataUrl;
+      state.draft.imageMeta = result;
+      state.error = '';
+      render();
+      toast('截图已压缩到 ' + Math.round(result.bytes / 1024) + 'KB');
+    }).catch(function (error) {
+      toast(error.message || '图片处理失败');
+    });
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Escape') return;
+    if (state.modal) closeModal();
+    else if (state.drawer) closeDrawer();
+  });
+
+  /* ---------- 启动 ---------- */
+  function renderBlocked() {
+    $('#app').innerHTML = '<div class="wrap"><section class="card blocked">' +
+      '<h1>需要本地服务才能查证</h1>' +
+      '<p>你当前是直接双击打开 HTML 文件（file:// 协议）。浏览器的同源策略会阻止页面调用真实接口，所以本页必须由 Next.js 服务提供。</p>' +
+      '<pre>cd /Users/yunfanai/vibe_coding/yuanbao_zhentan\npnpm dev\n\n# 然后打开：\nhttp://localhost:3000/index.html</pre>' +
+      '<ol><li>确认 <code>.env.local</code> 中的 <code>USE_MOCK=false</code>。</li>' +
+      '<li>启动后访问 <code>/index.html</code>，不要用 file:// 打开。</li>' +
+      '<li>如果端口不是 3000，请以终端输出的地址为准。</li></ol>' +
+      '<p style="margin-top:10px">完整版应用：<a href="http://localhost:3000/">http://localhost:3000/</a></p>' +
+    '</section></div>';
+  }
+
+  if (location.protocol === 'file:') {
+    renderBlocked();
+  } else {
+    state.history = loadHistory();
+    render();
+  }
+})();
+</script>
+</body>
+</html>
