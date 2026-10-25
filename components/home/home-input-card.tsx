@@ -1,7 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type ComponentType, type SVGProps } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { DetectiveMascot } from '@/components/ui/detective-mascot';
+import { FACTCHECK_RESERVE_CLAIMS, FACTCHECK_RESERVE_POINTS } from '@/lib/credits-policy';
+import { releaseCredits, reserveCredits } from '@/lib/credits-store';
+import { writeCreditsIntake } from '@/lib/credits-intake';
 import {
   CLAIMS_CHECK_HOME,
   SCRIPTCHECK_MAX,
@@ -102,6 +107,7 @@ export function HomeInputCard() {
   const noticeCode = searchParams.get('notice');
   const notice = noticeCode ? HOME_NOTICES[noticeCode] : undefined;
   const intakeParam = searchParams.get('intake');
+  const isMock = searchParams.get('mode') === 'mock';
   /** 业务模式与输入方式分开：文案体检先免费预检，消息查证直接立案。 */
   const [business, setBusiness] = useState<'factcheck' | 'scriptcheck'>(
     intakeParam === 'scriptcheck' ? 'scriptcheck' : 'factcheck',
@@ -113,6 +119,7 @@ export function HomeInputCard() {
   const [locked, setLocked] = useState(false);
   const [listening, setListening] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [creditShortfall, setCreditShortfall] = useState<number | null>(null);
   const [file, setFile] = useState<{
     raw: File;
     name: string;
@@ -235,11 +242,42 @@ export function HomeInputCard() {
       return;
     }
 
-    const isMock =
-      typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('mode') === 'mock';
-
     if (mode === 'text') {
+      if (!isMock) {
+        setSubmitting(true);
+        setFormError(null);
+        setCreditShortfall(null);
+
+        // 自动模式在请求前不知道疑点数：按后端单案上限 3 个预占，结案按 billing 退回差额。
+        const reservation = reserveCredits({
+          points: FACTCHECK_RESERVE_POINTS,
+          flow: 'factcheck',
+          note: `消息查证预占 · 自动模式最多 ${FACTCHECK_RESERVE_CLAIMS} 个疑点`,
+        });
+        if (!reservation.ok) {
+          setFormError(
+            reservation.reason === 'insufficient'
+              ? `${reservation.message} 本次不会发起查证。`
+              : reservation.message,
+          );
+          setCreditShortfall(reservation.shortfall ?? null);
+          setSubmitting(false);
+          return;
+        }
+
+        if (
+          !writeCreditsIntake({
+            transactionId: reservation.transactionId,
+            input: trimmedText,
+          })
+        ) {
+          releaseCredits(reservation.transactionId, '立案交接失败，预占积分已退回');
+          setFormError('浏览器会话存储不可用，无法交接本次立案，预占积分已退回。');
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const target = `/case?mode=${isMock ? 'mock' : 'real'}&text=${encodeURIComponent(trimmedText)}`;
       router.push(target);
       return;
@@ -252,11 +290,7 @@ export function HomeInputCard() {
     <section className="relative mx-auto mt-20 w-full max-w-[860px] px-4 sm:mt-16">
       <div className="relative rounded-[26px] border-[3px] border-ink bg-card p-4 shadow-ink-lg sm:p-5">
         <div className="pointer-events-none absolute -top-[58px] -left-1 z-20 flex items-end sm:-top-[66px] sm:-left-4">
-          <img
-            src="/images/detective-logo.png"
-            alt="侦探社吉祥物"
-            className="h-[64px] w-auto -rotate-3 sm:h-[78px]"
-          />
+          <DetectiveMascot className="h-[64px] w-auto -rotate-3 sm:h-[78px]" />
           <SpeechBubble
             tail="bottom"
             className="mb-3 -rotate-2 px-3 py-1.5 text-xs whitespace-nowrap sm:text-sm"
@@ -290,6 +324,7 @@ export function HomeInputCard() {
                 onClick={() => {
                   setBusiness('factcheck');
                   setFormError(null);
+                  setCreditShortfall(null);
                 }}
                 className={`rounded-lg border-2 border-ink px-3 py-1 text-xs font-black transition-transform ${
                   scriptcheck
@@ -307,6 +342,7 @@ export function HomeInputCard() {
                   setBusiness('scriptcheck');
                   setMode('text');
                   setFormError(null);
+                  setCreditShortfall(null);
                 }}
                 className={`relative rounded-lg border-2 border-ink px-3 py-1 text-xs font-black transition-transform ${
                   scriptcheck
@@ -366,6 +402,7 @@ export function HomeInputCard() {
                 onChange={(event) => {
                   setText(event.target.value);
                   setFormError(null);
+                  setCreditShortfall(null);
                 }}
                 rows={3}
                 aria-label={scriptcheck ? '要体检的文案' : '要查证的消息'}
@@ -567,6 +604,11 @@ export function HomeInputCard() {
               </p>
             )
           ) : null}
+          {!scriptcheck && mode === 'text' && !textHint ? (
+            <p className="mr-auto w-full text-[11px] font-bold text-muted sm:w-auto">
+              消息查证自动预占最多 {FACTCHECK_RESERVE_CLAIMS} 个疑点的积分，结案按实际退回差额。
+            </p>
+          ) : null}
           {mode === 'link' ? (
             <p className="mr-auto text-xs text-muted">
               公众号、新闻站都行；抖音 / 小红书打不开时建议复制文字
@@ -576,6 +618,14 @@ export function HomeInputCard() {
           {formError ? (
             <p role="alert" className="w-full text-right text-xs font-black text-coral">
               ⚠️ {formError}
+              {creditShortfall !== null ? (
+                <Link
+                  href="/credits"
+                  className="ml-1 underline decoration-dotted underline-offset-2"
+                >
+                  去积分中心 →
+                </Link>
+              ) : null}
             </p>
           ) : null}
 
@@ -586,7 +636,13 @@ export function HomeInputCard() {
             className="flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand px-6 py-2.5 text-base font-black text-white shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:border-gray disabled:bg-gray-soft disabled:text-gray disabled:shadow-none"
           >
             <span aria-hidden>{submitting ? '⏳' : scriptcheck ? '🔍' : '🕵️'}</span>
-            {submitting ? '正在整理截图…' : scriptcheck ? '免费找疑点' : '立案调查'}
+            {submitting
+              ? mode === 'image'
+                ? '正在整理截图…'
+                : '正在立案…'
+              : scriptcheck
+                ? '免费找疑点'
+                : '立案调查'}
           </button>
         </div>
       </div>

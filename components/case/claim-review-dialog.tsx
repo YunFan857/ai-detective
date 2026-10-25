@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useEffect } from 'react';
 import { ComicButton } from '@/components/ui/comic-button';
@@ -18,6 +19,10 @@ export type ClaimReviewDialogProps = {
   claims: Claim[];
   selectedIds: string[];
   pricePerClaim?: number;
+  /** 本地演示积分余额；null = 还在读取。 */
+  availablePoints?: number | null;
+  /** 预占失败等积分提示。 */
+  creditError?: string | null;
   onToggle: (claimId: string) => void;
   onToggleAll: () => void;
   onConfirm: () => void;
@@ -37,6 +42,8 @@ export function ClaimReviewDialog({
   claims,
   selectedIds,
   pricePerClaim,
+  availablePoints = null,
+  creditError,
   onToggle,
   onToggleAll,
   onConfirm,
@@ -46,6 +53,10 @@ export function ClaimReviewDialog({
   const reduced = useReducedMotion();
   const empty = !loading && claims.length === 0;
   const allSelected = claims.length > 0 && selectedIds.length === claims.length;
+  const pointsCost = selectedIds.length * (pricePerClaim ?? 0);
+  const readingCredits = availablePoints === null;
+  const insufficient = availablePoints !== null && pointsCost > availablePoints;
+  const afterPoints = availablePoints === null ? null : availablePoints - pointsCost;
 
   useEffect(() => {
     if (!open) return;
@@ -83,7 +94,7 @@ export function ClaimReviewDialog({
             className="relative flex max-h-[84vh] w-[560px] max-w-[calc(100vw-32px)] flex-col rounded-[24px] border-[3px] border-ink bg-card shadow-ink-lg"
           >
             <header className="flex shrink-0 items-start gap-3 border-b-2 border-ink/15 px-6 pt-5 pb-4">
-              <DetectiveMascot className="w-[56px] shrink-0 -rotate-3" />
+              <DetectiveMascot variant="avatar" className="w-[56px] shrink-0 -rotate-3" />
               <div className="min-w-0">
                 <p className="text-xs font-black tracking-wide text-muted">图片立案 · 第 1 步</p>
                 <h2
@@ -93,7 +104,7 @@ export function ClaimReviewDialog({
                   核对截图里的可疑点
                 </h2>
                 <p className="mt-1 text-xs leading-5 text-muted">
-                  先确认 AI 读对了，再勾选要深查的部分；没勾的不花钱。
+                  先确认 AI 读对了，再勾选要深查的部分；没勾的不扣积分。
                 </p>
               </div>
             </header>
@@ -210,7 +221,7 @@ export function ClaimReviewDialog({
             </div>
 
             <footer className="shrink-0 border-t-2 border-ink/15 px-6 py-4">
-              <div className="mb-2.5 flex items-center justify-between text-xs font-black text-muted">
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-black text-muted">
                 <button
                   type="button"
                   onClick={onToggleAll}
@@ -221,18 +232,53 @@ export function ClaimReviewDialog({
                 </button>
                 <span>
                   已选 {selectedIds.length} / {claims.length} 个
-                  {pricePerClaim ? ` · 每个 ¥${pricePerClaim}` : ''}
+                  {pricePerClaim ? ` · 每个 ${pricePerClaim} 积分 · 合计 ${pointsCost} 积分` : ''}
                 </span>
               </div>
+
+              <p className="mb-2 text-right text-[10px] leading-4 font-bold text-muted">
+                {readingCredits
+                  ? '正在读取本地积分余额…'
+                  : `本地演示积分 · 余额 ${availablePoints}${
+                      afterPoints !== null && afterPoints >= 0 ? ` → ${afterPoints}` : ' · 余额不足'
+                    }`}
+              </p>
+
+              {insufficient ? (
+                <p role="alert" className="mb-2 text-right text-[10px] font-black text-coral">
+                  积分不足，还差 {pointsCost - (availablePoints ?? 0)} 积分。
+                  <Link
+                    href="/credits"
+                    className="ml-1 underline decoration-dotted underline-offset-2"
+                  >
+                    去积分中心 →
+                  </Link>
+                </p>
+              ) : null}
+
+              {creditError ? (
+                <p
+                  role="alert"
+                  className="mb-2 rounded-lg border border-coral bg-coral-soft px-2 py-1 text-[10px] leading-4 font-bold text-coral"
+                >
+                  {creditError}
+                </p>
+              ) : null}
 
               <div className="grid gap-2">
                 <ComicButton
                   variant="brand"
                   onClick={onConfirm}
-                  disabled={loading || empty || selectedIds.length === 0}
+                  disabled={
+                    loading || empty || selectedIds.length === 0 || readingCredits || insufficient
+                  }
                   className="w-full"
                 >
-                  {empty ? '没有可深查的疑点' : `🔎 确认并深查（${selectedIds.length} 个）`}
+                  {empty
+                    ? '没有可深查的疑点'
+                    : insufficient
+                      ? '积分不足'
+                      : `🔎 确认并深查（${selectedIds.length} 个）`}
                 </ComicButton>
                 <div className="grid grid-cols-2 gap-2">
                   <ComicButton variant="white" size="sm" onClick={onSwitchToText}>

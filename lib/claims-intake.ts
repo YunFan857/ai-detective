@@ -34,6 +34,8 @@ export const ClaimsHandoffSchema = z.object({
   input: z.string(),
   selectedClaimIds: z.array(z.string()).min(1).max(MAX_SELECTED_CLAIMS),
   pricePerClaim: z.number().nonnegative(),
+  /** 本地积分预占交易 id；旧交接没有该字段时只展示、不扣本地积分。 */
+  transactionId: z.string().min(1).optional(),
   createdAt: z.number().int().nonnegative(),
 });
 export type ClaimsHandoff = z.infer<typeof ClaimsHandoffSchema>;
@@ -97,6 +99,7 @@ export function writeClaimsHandoff(input: {
   input: string;
   selectedClaimIds: string[];
   pricePerClaim: number;
+  transactionId?: string;
 }): boolean {
   const parsed = ClaimsHandoffSchema.safeParse({
     version: HANDOFF_VERSION,
@@ -106,6 +109,7 @@ export function writeClaimsHandoff(input: {
     input: input.input,
     selectedClaimIds: input.selectedClaimIds,
     pricePerClaim: input.pricePerClaim,
+    ...(input.transactionId ? { transactionId: input.transactionId } : {}),
     createdAt: Date.now(),
   });
   if (!parsed.success) return false;

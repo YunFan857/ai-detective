@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CaseError } from '@/components/case/case-error';
@@ -14,11 +15,11 @@ import { ShareCardDialog } from '@/components/share-card';
 import { StepButtons } from '@/components/step-buttons';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { VerdictPanel } from '@/components/verdict-panel';
-import {
-  clearClaimsHandoff,
-  readClaimsHandoff,
-  type ClaimsHandoff,
-} from '@/lib/claims-intake';
+import { clearClaimsHandoff, readClaimsHandoff, type ClaimsHandoff } from '@/lib/claims-intake';
+import { clearCreditsIntake, readCreditsIntake, type CreditsIntake } from '@/lib/credits-intake';
+import { useCredits } from '@/lib/credits';
+import { releaseCredits, reserveCredits, settleCredits } from '@/lib/credits-store';
+import { FACTCHECK_RESERVE_POINTS } from '@/lib/credits-policy';
 import type { StepId } from '@/lib/steps';
 import {
   useInvestigation,
@@ -163,16 +164,30 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   );
   const [handoffMissing, setHandoffMissing] = useState(false);
   const [scriptInput, setScriptInput] = useState('');
+  const [creditError, setCreditError] = useState<string | null>(null);
+  const [factcheckCreditState, setFactcheckCreditState] = useState<
+    'unknown' | 'reserved' | 'unconfirmed'
+  >('unknown');
   const [focusRequest, setFocusRequest] = useState<{
     sourceId: string;
     nonce: number;
   } | null>(null);
   const autoOpenedRef = useRef(false);
   const imageRef = useRef<string | null>(null);
+  const credits = useCredits();
   /** 用户确认过的疑点；「重新调查」用它直接深查，不再重跑识别。 */
-  const confirmedRef = useRef<{ previewId: string; selectedClaimIds: string[] } | null>(null);
+  const confirmedRef = useRef<{
+    previewId: string;
+    selectedClaimIds: string[];
+    pricePerClaim: number;
+  } | null>(null);
   /** 文案体检的已确认预览；只读一次，刷新后不重复开查。 */
   const handoffRef = useRef<ClaimsHandoff | null>(null);
+  /** 消息查证的积分预占交接；只读一次。 */
+  const factcheckIntakeRef = useRef<CreditsIntake | null>(null);
+  const factcheckIntakeCheckedRef = useRef(false);
+  /** 当前案件的本地积分交易；结算 / 退回后不重复扣费。 */
+  const paidTransactionRef = useRef<string | null>(null);
 
   /** 按当前 URL 参数开案；图片先走拆疑点，确认后再深查。 */
   const startCase = useCallback(() => {
@@ -223,6 +238,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
       // StrictMode 第二次执行直接用内存里的交接，不再读一次会话存储。
       if (handoffRef.current) {
         const restored = handoffRef.current.input;
+        paidTransactionRef.current = handoffRef.current.transactionId ?? null;
         let cancelled = false;
         // 推迟到微任务再开查：StrictMode 首轮 effect 的清理会取消这次调度，
         // 只有第二轮真正执行，避免一次操作发出两次查证请求。
@@ -250,6 +266,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
       // 读取后立即删除：刷新或前进后退不会重复开查、重复扣费。
       clearClaimsHandoff();
       handoffRef.current = handoff;
+      paidTransactionRef.current = handoff.transactionId ?? null;
       let cancelled = false;
       queueMicrotask(() => {
         if (cancelled) return;
@@ -262,6 +279,29 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     }
 
     if (!imageMode) {
+      // 消息查证：首页已在跳转前按上限预占积分，这里只读一次交接。
+      if (mode === 'real' && text) {
+        if (!factcheckIntakeCheckedRef.current) {
+          factcheckIntakeCheckedRef.current = true;
+          const intake = readCreditsIntake();
+          clearCreditsIntake();
+
+          if (intake && intake.input.trim() === text) {
+            factcheckIntakeRef.current = intake;
+            paidTransactionRef.current = intake.transactionId;
+            queueMicrotask(() => setFactcheckCreditState('reserved'));
+          } else {
+            // 带 text 直接打开 / 刷新：没有预占就不扣本地积分，避免重复扣费。
+            if (intake) {
+              releaseCredits(intake.transactionId, '立案文案不一致，预占积分已退回');
+            }
+            factcheckIntakeRef.current = null;
+            paidTransactionRef.current = null;
+            queueMicrotask(() => setFactcheckCreditState('unconfirmed'));
+          }
+        }
+      }
+
       startCase();
       return;
     }
@@ -340,7 +380,30 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     })();
 
     return () => controller.abort();
-  }, [imageMode, router, scriptcheckFlow, startCase]);
+  }, [imageMode, mode, router, scriptcheckFlow, startCase, text]);
+
+  /**
+   * 本地积分结算：
+   * - 收到 billing 即按 charged - refunded 结算，billing 和 done 重复到达由 store 幂等；
+   * - done 但没有 billing：按 0 费用退回预占；
+   * - 终止失败（网络 / 流中断 / 服务端不可恢复）：退回预占，不因可恢复 error 退款。
+   */
+  useEffect(() => {
+    const transactionId = paidTransactionRef.current;
+    if (!transactionId) return;
+
+    if (state.billing) {
+      settleCredits(transactionId, state.billing, state.caseId ?? undefined);
+      return;
+    }
+    if (state.status === 'done') {
+      releaseCredits(transactionId, '结案未收到结算结果，预占积分已退回');
+      return;
+    }
+    if (state.failure) {
+      releaseCredits(transactionId, '查证中止，预占积分已退回');
+    }
+  }, [state.billing, state.caseId, state.failure, state.status]);
 
   // 第 5 步揭示时自动弹出一次；之后由底部「结案！」按钮重新打开。
   useEffect(() => {
@@ -358,21 +421,24 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     : imageMode
       ? '图片立案'
       : (MODE_LABELS[mode ?? 'mock'] ?? '文字立案');
+  const creditMode: 'charged' | 'demo' | 'unconfirmed' =
+    scriptcheckFlow || imageMode
+      ? 'charged'
+      : mode === 'real' && text
+        ? factcheckCreditState === 'unconfirmed'
+          ? 'unconfirmed'
+          : 'charged'
+        : 'demo';
   /** 图片识别失败或服务端不可恢复错误：交给专用弹窗，不再整页报错。 */
   const imageFailure =
-    imageMode &&
-    state.failure &&
-    (state.failure.kind === 'http' || state.failure.kind === 'server')
+    imageMode && state.failure && (state.failure.kind === 'http' || state.failure.kind === 'server')
       ? state.failure
       : null;
   /** HTTP 错误没有收到任何事件，整页提示并给返回首页。 */
-  const httpFailure =
-    !imageMode && state.failure?.kind === 'http' ? state.failure : null;
+  const httpFailure = !imageMode && state.failure?.kind === 'http' ? state.failure : null;
   /** 网络 / 流意外结束：顶部横幅保留现场并允许重新调查。 */
   const interrupted =
-    !imageFailure && state.failure && state.failure.kind !== 'http'
-      ? state.failure
-      : null;
+    !imageFailure && state.failure && state.failure.kind !== 'http' ? state.failure : null;
   const imageFailureInfo = imageFailure ? imageFailureCopy(imageFailure) : null;
   /** 拆疑点阶段的失败：同样复用图片失败弹窗的文案与操作。 */
   const reviewFailureInfo = review?.status === 'error' ? imageFailureCopy(review.failure) : null;
@@ -431,14 +497,60 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     setVerdictOpen(true);
   }, []);
 
-  /** 中断后重新立案：先收起弹层，再复用当前参数重跑。 */
+  /** 中断后重新立案：先退回旧预占，再按当前入口重新预占并复用参数重跑。 */
   const handleRetry = useCallback(() => {
     setVerdictOpen(false);
     setShareOpen(false);
     autoOpenedRef.current = false;
     setFocusRequest(null);
+    setCreditError(null);
+
+    if (paidTransactionRef.current) {
+      releaseCredits(paidTransactionRef.current, '重新查证，旧预占已退回');
+      paidTransactionRef.current = null;
+    }
+
+    let reservationInput: {
+      points: number;
+      flow: 'scriptcheck' | 'image' | 'factcheck';
+      note: string;
+    } | null = null;
+
+    if (scriptcheckFlow) {
+      const handoff = handoffRef.current;
+      if (!handoff) return;
+      reservationInput = {
+        points: handoff.selectedClaimIds.length * handoff.pricePerClaim,
+        flow: 'scriptcheck',
+        note: `文案体检重新查证 · ${handoff.selectedClaimIds.length} 个疑点`,
+      };
+    } else if (imageMode) {
+      const confirmed = confirmedRef.current;
+      if (!confirmed || !imageRef.current) return;
+      reservationInput = {
+        points: confirmed.selectedClaimIds.length * confirmed.pricePerClaim,
+        flow: 'image',
+        note: `图片立案重新查证 · ${confirmed.selectedClaimIds.length} 个疑点`,
+      };
+    } else if (mode === 'real' && text && factcheckIntakeRef.current) {
+      reservationInput = {
+        points: FACTCHECK_RESERVE_POINTS,
+        flow: 'factcheck',
+        note: '消息查证重新预占 · 自动模式最多 3 个疑点',
+      };
+    }
+
+    if (reservationInput) {
+      const reservation = reserveCredits(reservationInput);
+      if (!reservation.ok) {
+        setCreditError(`${reservation.message} 本次没有重新发起查证。`);
+        return;
+      }
+      paidTransactionRef.current = reservation.transactionId;
+    }
+
     startCase();
-  }, [startCase]);
+  }, [imageMode, mode, scriptcheckFlow, startCase, text]);
 
   /** 图片失败后改为文字：回首页，默认停在文字页签。 */
   const handleSwitchToText = useCallback(() => {
@@ -474,9 +586,28 @@ function CaseContent({ searchParams }: CaseSearchParams) {
     const image = imageRef.current;
     if (!image) return;
 
+    setCreditError(null);
+    if (paidTransactionRef.current) {
+      releaseCredits(paidTransactionRef.current, '重新确认疑点，旧预占已退回');
+      paidTransactionRef.current = null;
+    }
+
+    const pricePerClaim = review.preview.pricePerClaim;
+    const reservation = reserveCredits({
+      points: review.selected.length * pricePerClaim,
+      flow: 'image',
+      note: `图片立案 · ${review.selected.length} 个疑点 × ${pricePerClaim} 积分`,
+    });
+    if (!reservation.ok) {
+      setCreditError(`${reservation.message} 本次不会发起深查，也没有扣积分。`);
+      return;
+    }
+
+    paidTransactionRef.current = reservation.transactionId;
     confirmedRef.current = {
       previewId: review.preview.previewId,
       selectedClaimIds: review.selected,
+      pricePerClaim,
     };
     setReview(null);
     start({
@@ -489,8 +620,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
   }, [review, start]);
 
   if (scriptcheckFlow && (handoffMissing || httpFailure)) {
-    const expired =
-      handoffMissing || httpFailure?.status === 404 || httpFailure?.status === 400;
+    const expired = handoffMissing || httpFailure?.status === 404 || httpFailure?.status === 400;
     return (
       <main className="flex h-dvh min-h-[720px] min-w-[1280px] flex-col overflow-hidden bg-paper text-ink">
         <ClaimsStateCard
@@ -539,6 +669,28 @@ function CaseContent({ searchParams }: CaseSearchParams) {
         </ErrorBoundary>
       ) : null}
 
+      {creditError ? (
+        <div
+          role="alert"
+          className="flex shrink-0 flex-wrap items-center gap-2 border-b-2 border-ink bg-coral-soft px-3 py-2 text-xs font-black text-coral"
+        >
+          <span className="min-w-0 flex-1">⚠️ {creditError}</span>
+          <Link
+            href="/credits"
+            className="shrink-0 rounded-full border-2 border-ink bg-card px-2.5 py-1 text-[10px] font-black text-ink shadow-ink-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark"
+          >
+            去积分中心 →
+          </Link>
+          <button
+            type="button"
+            onClick={() => setCreditError(null)}
+            className="shrink-0 rounded-full border-2 border-ink bg-card px-2.5 py-1 text-[10px] font-black text-ink shadow-ink-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark"
+          >
+            关闭
+          </button>
+        </div>
+      ) : null}
+
       <div className="flex min-h-0 flex-1 gap-3 p-3">
         <ErrorBoundary label="办案实况" className="w-[300px] shrink-0">
           <ProgressFeed
@@ -553,6 +705,7 @@ function CaseContent({ searchParams }: CaseSearchParams) {
             }
             state={state}
             reveal={reveal}
+            creditsMode={creditMode}
           />
         </ErrorBoundary>
 
@@ -611,6 +764,8 @@ function CaseContent({ searchParams }: CaseSearchParams) {
             claims={review.status === 'ready' ? review.preview.claims : []}
             selectedIds={review.status === 'ready' ? review.selected : []}
             pricePerClaim={review.status === 'ready' ? review.preview.pricePerClaim : undefined}
+            availablePoints={credits.status === 'ready' ? credits.balance : null}
+            creditError={creditError}
             onToggle={handleToggleClaim}
             onToggleAll={handleToggleAll}
             onConfirm={handleConfirmClaims}

@@ -2,6 +2,7 @@
 
 > 上位文件：[AGENTS.md](../AGENTS.md)、[frontend-rules.md](frontend-rules.md)。
 > 本文件只记录前端进度，后端改动需求集中写在「六、需 A 配合」。
+> 最新进展：第九节（积分中心与本地积分账本）、第十节（新侦探形象）、第十一节（需 A 配合的积分口径）。
 
 ## 一、本次完成
 
@@ -63,7 +64,7 @@
 
 ## 五、暂未覆盖
 
-- 积分账户模块尚未存在：结算栏只展示估算与「暂未启用积分账户」，无余额、无不足拦截、无真实扣款。`billing` 事件已接入状态，等积分模块落地即可在此基础上结算。⑦b 在无真实账户时同样显示「积分账户尚未接入」，不启动自动开查，只保留手动入口。
+- （历史）积分账户模块当时尚未存在：结算栏只展示估算与「暂未启用积分账户」，无余额、无不足拦截、无真实扣款。现在已由第九节的本地演示账本补齐余额、签到、预占、扣费与退回；真实账户接口仍需 A。
 - 06 的「逐句扫描」不可实现：`extract-claims` 是一次性 JSON，前端不伪造进度，只保留明确标注的等待动效。
 - 07b 已由「3 秒」改为「30 秒」，详见第八节。
 
@@ -72,13 +73,13 @@
 1. mock 模式下预检 id 与目录不一致：`mock/claims-preview-script.json` 的 `previewId` 是 `preview-script-001`，而 `loadPreview` 查 `.cache/previews`、`cache/`、`cache/preview-*.json`，现有缓存文件 id 是 `bc2a24ce`。`USE_MOCK=true` 演示时 `/api/investigate` 可能返回 404 `preview_not_found`，需统一 id 或落盘位置。
 2. `/api/investigate` 允许省略 `selectedClaimIds`（省略即全查）。前端始终显式传，但建议服务端在 `mode:"scriptcheck"` 且 `previewId` 存在时强制要求该字段，避免误全量扣费。
 3. `extract-claims` 无流式进度，若后续要展示真实逐句进度，需要新增 SSE 或分句回传接口。
-4. 需要积分账户接口（余额查询 + 扣费/退款口径），前端才能展示余额、拦截不足，并把 `billing` 与 `done` 的重复结算去重。
+4. （历史）需要真实积分账户接口（余额查询 + 扣费/退款口径）。本地演示账本、余额展示、不足拦截与 `billing` / `done` 去重已在第九节落地；真实钱包接口仍需 A。
 5. `/api/extract-claims` 偶发 `HTTP 500 · 模型返回内容为空`（`lib/llm.ts` 的 `EMPTY_CONTENT`）。接口本身可用：同一文案复测 200、约 23s。疑似上游 `deepseek-flash` 思维链吃光 `max_tokens`、`response_format: json_object` 网关兼容或限流，建议 A：对空内容自动重试、日志记录 `finish_reason`、必要时换 `LLM_MODEL`。
 
 ## 七、优化记录（logo / 顶栏 / 500 文案）
 
 - `public/images/detective-logo.png` 换为新 2D 小侦探（`侦探2d.jpg` 抠白底，512×512 透明）。品牌位 4 处引用自动生效。
-- `components/ui/detective-mascot.tsx`：`default` 态改渲染该位图，`yawn` 态因新图无打哈欠表情保留 SVG；调用方 className 不变。
+- `components/ui/detective-mascot.tsx`：`default` / `yawn` 都渲染新位图，`yawn` 只在同一张图上叠加 Zzz；新增 `variant="avatar"` 使用头部裁切图 `detective-avatar.png`，小尺寸调用方已切换，不再保留旧绿脸 SVG。
 - `components/claims/claims-top-bar.tsx`：顶栏 `bg-ink` → `bg-brand`（元宝绿），描边、阴影保持，文字/边框对比度同步调整。
 - `lib/use-claims-check.ts`：5xx 文案改为说明“上游模型偶发无结果，重试即可”。
 - 截图：`screenshots/opt-*.jpg`。
@@ -108,6 +109,128 @@
 
 ### 待配合
 
-- 需要积分账户接口（余额查询 + 扣费/退款口径）：当前 `lib/credits.ts` 默认 `unavailable`，⑦b 只显示「积分账户尚未接入」并保留手动入口，不会伪造余额；开发期可用 `?demoCredits=38` 或 `sessionStorage['claims:demo-credits']` 走演示余额，生产构建关闭。
+- （历史）需要真实积分账户接口（余额查询 + 扣费/退款口径）。现在 `lib/credits.ts` 已接本地 localStorage 账本（第九节），`?demoCredits` / `claims:demo-credits` 临时余额已移除；真实钱包接口仍需 A。
 - 前端锁只保证本页面单次启动，**不等价于服务端幂等**；建议 `previewId + selectedClaimIds` 在服务端做幂等键，避免重复计费。
 - `POST /api/investigate` 的 404 `preview_not_found`（预览过期/缓存被清）前端提示重新体检，不自动重启倒计时；网络失败显示错误 + 手动重试。
+
+## 九、积分中心 ⑧ 与本地积分账本
+
+### 已完成
+
+- 新增 `/credits`：桌面三栏「我的积分 / 购买积分 / 确认订单」，手机纵向堆叠；视觉沿用元宝绿、浅薄荷纸面、墨色描边、硬投影与圆角 token。
+- 本地积分 store（`lib/credits-store.ts`）：
+  - localStorage 键 `ai-detective:credits:v1`，带 `version: 1` 与 zod 结构校验。
+  - 首次初始化赠送 120 积分，只初始化一次；明确标注为演示赠送。
+  - 赠送批次与模拟充值批次分开；赠送积分有效期 7 个自然日，按 `Asia/Shanghai` 计算到期日 23:59:59，到期惰性失效并写流水。
+  - 扣费顺序：先扣最快过期的赠送积分，再扣模拟充值积分；退款按原分配批次退回，不会把快过期赠送积分转成永久充值积分。
+  - 所有增减分统一写流水：演示赠送、签到、模拟充值、查证扣除、退回、到期。
+  - 多组件共用同一个 store；监听 `storage` 事件同步其他标签页；SSR 返回固定 loading 快照，首帧不读 `window/localStorage`。
+  - localStorage 损坏时备份原值并恢复演示初始状态；localStorage 不可写时退化为内存账本，页面显示明确提示，不白屏。
+- 积分中心：
+  - 总可用积分、`floor(余额 / 8)` 个疑点估算、赠送 / 模拟充值分栏、赠送批次与到期日。
+  - 每日签到 +10，同一浏览器同一北京时间日期只能领取一次；首页账号面板与积分中心共用签到状态。
+  - 三档套餐：9.9 元 / 100 积分、29.9 元 / 330 积分（多送 10%）、99 元 / 1200 积分（多送 20%），每档显示约可查疑点数。
+  - 微信 / 支付宝仅作禁用占位；显示「支付即将开放 · 当前仅供演示」，不生成二维码、不出现「支付成功」。
+  - 「模拟 +100」与「模拟到账」都写本地流水；按钮有 `event.detail > 1` 双击拦截与 800ms 同 tick 锁，同步双击只入账一次。
+  - 最近积分流水展示最近 8 条；无记录时给空状态。
+  - 样例报告复用 `cache/script-demo-1.json`：`/case?mode=demo&demoId=script-demo-1`。
+  - 页脚「开始体检」接现有 `/?intake=scriptcheck`。
+- 查证扣费闭环：
+  - 免费拆疑点不扣积分；0 疑点 / 未勾选不扣费。
+  - 文案体检 ⑦：确认 N 个疑点时预占 `N × pricePerClaim`，余额不足时按钮禁用并给 `/credits` 入口；预占成功后才写交接并跳 `/case`。
+  - 文案体检 ⑦b：倒计时/立即开始/手动开始统一在 `begin` 里预占；交接失败退回预占。
+  - 图片立案：核对疑点后预占 `N × pricePerClaim`，余额不足不发起深查；弹窗显示每个 / 合计 / 余额。
+  - 消息查证：首页跳转前按自动模式上限预占 24 积分（3 个疑点 × 8），结案按 `billing` 退回差额；交接只读一次即删。
+  - `/case` 消费 `billing` 事件，并把 `done.caseFile.billing` 作为兜底；同一交易 / 同一 `caseId` 只结算一次。
+  - 最终净扣以 `billing.charged - billing.refunded` 为准，不根据判决文案猜退款；0 费用、部分退款、全额退款都走同一结算方法。
+  - 终止失败、网络中断、流缺失、`done` 无 `billing` 时退回预占；可恢复 `error` 不触发退款。
+  - 页面关闭 / 刷新遗留的 pending 交易，超过 10 分钟未结算时在下次加载自动退回。
+  - mock / demo 回放不创建本地交易，卷宗页标注「演示不扣积分」。
+- 卷宗页左栏新增积分结算卡：只读结构化 `billing` 字段生成「查证 N 个 · 扣除 X · 退回 Y · 净扣 Z」，不展示可能含「元」的 `billing.reason`。
+
+### 改动文件
+
+新增：
+
+- `app/credits/page.tsx`
+- `components/credits/credits-workspace.tsx`
+- `components/credits/credits-top-bar.tsx`
+- `components/credits/credits-balance-card.tsx`
+- `components/credits/credits-packages.tsx`
+- `components/credits/credits-checkout.tsx`
+- `components/credits/credits-ledger.tsx`
+- `components/credits/credits-footer.tsx`
+- `lib/credits-policy.ts`
+- `lib/credits-store.ts`
+- `lib/credits-format.ts`
+- `lib/credits-intake.ts`
+- `lib/use-credits-center.ts`
+- `public/images/detective-avatar.png`
+- `screenshots/credits-desktop.png`
+- `screenshots/credits-mobile.png`
+
+修改：
+
+- `lib/credits.ts`：从临时只读演示余额改为 localStorage 账本视图，保留 `useCredits` / `readCredits` 调用兼容。
+- `components/home/account-dock.tsx`：余额 / 签到共用 store，「积分充值」跳 `/credits`。
+- `components/home/home-input-card.tsx`：消息查证预占 24 积分并写版本化 sessionStorage 交接；余额不足给积分中心入口。
+- `components/claims/claims-top-bar.tsx`：显示本地余额并链接积分中心。
+- `components/claims/claims-pick.tsx`：展示余额、预计扣费与不足拦截。
+- `components/claims/claims-autorun.tsx`：费用行改本地积分口径，余额不足给 `/credits` 入口。
+- `lib/use-claims-check.ts`、`lib/use-claims-autorun.ts`、`lib/claims-intake.ts`：确认 / 自动开查前预占，交接携带 `transactionId`。
+- `app/case/page.tsx`：读取积分交接、建立本地交易、消费 `billing` / `done`、失败退回、图片确认预占、重试重新预占。
+- `components/case/claim-review-dialog.tsx`：图片立案显示积分合计、余额、不足拦截与预占失败提示。
+- `components/progress-feed.tsx`：卷宗左栏显示积分模式与结算结果。
+- `lib/claims-autorun-controller.ts`：默认积分状态补 message 字段。
+- `lib/labels.ts`：新增积分流水类型中文映射。
+
+未改动：`app/api/`、`lib/pipeline/`、`types/`、`mock/`、`cache/`、`scripts/`。
+
+### 已验证
+
+- `pnpm typecheck`：通过。
+- `pnpm lint`：0 error（6 条既有 warning，均为 `<img>` 或旧脚本未使用变量）。
+- `pnpm build`：通过，`/credits` 静态预渲染。
+- store 逻辑脚本（临时文件，未提交）：
+  - 初始 120；签到一次 +10，第二次返回 already；模拟充值 +100 独立成批。
+  - 预占 24，`charged=24 / refunded=4` → 净扣 20、退回 4，余额从 230 → 210。
+  - 同一交易重复结算 / `done` 重复到达只结算一次；全额退款净扣 0。
+  - 余额不足返回 insufficient，余额不变成负数。
+  - 过期赠送 30 先失效；再预占 40 时先扣赠送、再扣充值，余额正确。
+  - 中断退回全部预占；迟到的 billing 不再扣；0 费用交易净扣 0；同一 `caseId` 第二笔预占自动退回。
+- 真实接口端到端（浏览器 + 本地 dev server）：
+  - 首页输入「隔夜水不能喝，放一晚会产生致癌物亚硝酸盐」→ 预占 24 → 结案 `charged=8 / refunded=0` → 退回 16，余额 120 → 112，卷宗左栏显示「查证 1 个疑点 · 扣除 8 积分 · 未产生退款 · 实际净扣 8 积分」。
+- 浏览器：
+  - `/credits` 桌面 1440×900 三栏无横向溢出，截图 `screenshots/credits-desktop.png`。
+  - 390×844 移动视口通过 CDP 实测 `document.documentElement.scrollWidth = 390`，无越界元素，截图 `screenshots/credits-mobile.png`。
+  - 签到后刷新仍为已领取；首页账号面板余额与签到状态同步；「积分充值」跳转 `/credits`。
+  - 同步 dispatch 两次 click（detail=1 + detail=2）只入账一次；同一事件循环两次 detail=1 也只入账一次（800ms 锁）。
+  - demo 卷宗 `script-demo-1` 回放前后余额 120 不变，页面显示「演示不扣积分」。
+  - localStorage 写入 `{broken-json` 时显示「本地积分数据已损坏」并恢复 120；`Storage.prototype.setItem` 强制抛错时显示「浏览器存储不可用」，页面不白屏。
+
+### 已知缺口
+
+- 直接打开 `/case?mode=real&text=...`（没有首页积分交接）时，页面显示「未经首页积分预占 · 本次不扣本地积分」，仍会发起真实查证但不走本地扣费；这是为避免刷新 / 手改 URL 重复扣费的保守策略。完整覆盖需要 A 提供请求前疑点数或服务端幂等键。
+- 本地积分是演示账本，不是生产钱包：没有登录、账户接口、真实订单、支付回调或支付 SDK。
+- 模拟充值立即入账；没有订单号、支付状态或退款单，只写本地流水。
+- 本地只做 UI / 交易层幂等，不等价于服务端幂等。
+
+## 十、新侦探形象替换
+
+- 角色依据用户提供的 `侦探2d.jpg`：肤色圆脸、棕色侦探帽、绿色帽带、金色单片镜与链条、红色小鼻子、绿色风衣、大眼睛。
+- `public/images/detective-logo.png`：完整半身，512×512 透明 PNG，已确认 `hasAlpha: yes`，无白底。
+- 新增 `public/images/detective-avatar.png`：从同一张透明位图裁出头部 + 帽檐 + 单片镜链条，512×512 透明，用于 24–48px 小尺寸；不拉伸、不裁掉帽子 / 单片镜 / 眼睛 / 红鼻子。
+- `DetectiveMascot` 新增可选 `variant="full" | "avatar"`，默认 `full`，对外 className / style / mood 兼容；`mood="yawn"` 使用同一新角色静图并叠加 Zzz，不回退旧绿脸。
+- 小尺寸调用处已切头像：账号悬浮球 / 账号面板、文案体检顶栏、进度头像、案例页头、疑点选择栏、自动开查提示、图片疑点确认弹窗。
+- 大尺寸继续用完整半身：首页报案单、空状态、失败弹窗、证据图谱空态、styleguide。
+- 全项目检索 `detective-logo.png` / `DetectiveMascot` / 旧 SVG，未发现旧绿脸手绘残留；没有替换合作方 logo、元宝搜索标识或产品名。
+- 截图：`screenshots/credits-desktop.png`、`screenshots/credits-mobile.png`；styleguide 第 07 节同时展示完整半身与头像裁切。
+
+## 十一、需 A 配合（积分口径与接口）
+
+1. **billing 单位**：`lib/pipeline/index.ts` 的 `PRICE_PER_CLAIM` / `REFUND_PER_CLAIM` 注释与 `billing.reason` 仍写「元」，`lib/export-md.ts` 的结算行也写「元」。前端已统一使用「积分」，并且不直接展示 `billing.reason`；建议 A 把后端注释、reason 与 Markdown 导出统一改成「积分」。
+2. **没有积分账户 / 订单 / 支付接口**：本次没有新增或伪造余额查询、充值、订单、支付回调接口；`/credits` 只是本地演示。若后续做真实钱包，需要 A 定义账户余额、扣费 / 退款、订单与幂等接口。
+3. **消息查证请求前不知道疑点数**：前端按 `AUTO_CLAIM_LIMIT = 3` 预占 24 积分，结案按 billing 退回差额。若 A 调整 `lib/pipeline/index.ts` 的自动模式上限或单价，请同步通知前端更新 `lib/credits-policy.ts`；更理想的是复用 `extract-claims` 预览或提供请求前计数接口，前端才能按实际 N 预占。
+4. **直接 URL 入口**：`/case?mode=real&text=...` 无首页交接时不会本地扣费（仅展示提示）。如果要求所有入口都关闭扣费，建议 A 提供服务端幂等键（`previewId + selectedClaimIds` 或交易 id），前端再把直接 URL 也纳入预占。
+5. **服务端结算幂等**：本地按交易 id + `caseId` 去重；真实钱包仍建议服务端按 `previewId + selectedClaimIds` 或客户端交易 id 幂等，避免 SSE 重连 / 重试造成重复扣费。
+6. **流缺失 / done 无 billing**：前端在终止失败或结案无 billing 时退回预占，优先避免重复扣费；真实钱包需要 A 明确「服务端已扣但事件丢失」的对账 / 回滚策略。

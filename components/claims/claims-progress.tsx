@@ -108,7 +108,7 @@ export function ClaimsProgress({ text, elapsedSeconds, onCancel }: ClaimsProgres
         >
           <header className="flex shrink-0 items-center gap-2.5 border-b-2 border-ink/15 px-4 py-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft">
-              <DetectiveMascot className="h-11 w-11 -translate-y-1" />
+              <DetectiveMascot variant="avatar" className="h-11 w-11 -translate-y-1" />
             </span>
             <div className="min-w-0">
               <h2 className="text-base leading-snug font-black text-ink">侦探正在找疑点…</h2>
@@ -147,7 +147,7 @@ export function ClaimsProgress({ text, elapsedSeconds, onCancel }: ClaimsProgres
             </ol>
 
             <div className="flex items-start gap-2 pt-1">
-              <DetectiveMascot className="w-9 shrink-0 -rotate-3" />
+              <DetectiveMascot variant="avatar" className="w-9 shrink-0 -rotate-3" />
               <SpeechBubble tail="left" className="text-xs leading-5">
                 正在通读整篇文案，找出人名、时间、数字和绝对化说法；有结果后会先给你看风险分布，再让你决定查哪些。
               </SpeechBubble>

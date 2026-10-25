@@ -13,13 +13,7 @@ import type { CreditsView } from '@/lib/credits';
  */
 
 export type AutorunPhase =
-  | 'idle'
-  | 'pending'
-  | 'counting'
-  | 'cancelled-editable'
-  | 'stale'
-  | 'starting'
-  | 'error';
+  'idle' | 'pending' | 'counting' | 'cancelled-editable' | 'stale' | 'starting' | 'error';
 
 /** pending 的原因：init=刚展示还没开始计时；hidden=页面在后台；credits-loading=积分读取中。 */
 export type PendingReason = 'init' | 'hidden' | 'credits-loading';
@@ -30,13 +24,7 @@ export type ManualReason = 'cancelled' | 'restored' | 'no-account' | 'insufficie
 export type StartSource = 'timer' | 'now' | 'manual' | 'retry';
 
 export type StartResult =
-  | 'started'
-  | 'locked'
-  | 'invalid'
-  | 'stale'
-  | 'blocked'
-  | 'insufficient'
-  | 'failed';
+  'started' | 'locked' | 'invalid' | 'stale' | 'blocked' | 'insufficient' | 'failed';
 
 export type AutorunSubject = {
   /** 草稿 id + 预览 id；变化即视为一个全新的流程。 */
@@ -121,7 +109,10 @@ export class AutorunController {
   private snapshot: AutorunSnapshot = INITIAL;
   private readonly listeners = new Set<() => void>();
   private subject: AutorunSubject | null = null;
-  private env: AutorunEnv = { credits: { status: 'unavailable' }, visible: true };
+  private env: AutorunEnv = {
+    credits: { status: 'unavailable', message: '本地积分尚未读取' },
+    visible: true,
+  };
   private attached = false;
   /** 每次作废计时器 / 切换主体都自增；迟到的回调凭此失效。 */
   private epoch = 0;

@@ -24,13 +24,7 @@ const PALETTE = [
 ] as const;
 
 const TIERS: Tier[] = ['official', 'media', 'self', 'marketing', 'unknown'];
-const VERDICTS: VerdictLevel[] = [
-  'true',
-  'partly_true',
-  'out_of_context',
-  'unverified',
-  'false',
-];
+const VERDICTS: VerdictLevel[] = ['true', 'partly_true', 'out_of_context', 'unverified', 'false'];
 
 const BURSTS: { label: string; tone: BurstTone }[] = [
   { label: '属实', tone: 'brand' },
@@ -122,14 +116,20 @@ export default function StyleguidePage() {
         </section>
 
         <section>
-          <SectionHeading index="02" title="字体：400 / 700 / 900" hint="Noto Sans SC，900 用于花字与按钮" />
+          <SectionHeading
+            index="02"
+            title="字体：400 / 700 / 900"
+            hint="Noto Sans SC，900 用于花字与按钮"
+          />
           <ComicCard className="space-y-4 p-5 sm:p-6">
             <div>
               <p className="text-[11px] font-black tracking-widest text-gray">900 · 花字标题</p>
               <p className="huazi mt-1 text-4xl">把结论的来路查清楚！</p>
             </div>
             <div>
-              <p className="text-[11px] font-black tracking-widest text-gray">700 · 小标题 / 按钮</p>
+              <p className="text-[11px] font-black tracking-widest text-gray">
+                700 · 小标题 / 按钮
+              </p>
               <p className="mt-1 text-2xl font-bold">疑点拆解 · 正反搜证 · 五档判决</p>
             </div>
             <div>
@@ -193,7 +193,9 @@ export default function StyleguidePage() {
                 墨黑
               </Sticker>
               <h3 className="mt-3 text-lg font-black">结案播报</h3>
-              <p className="mt-1 text-xs leading-6 text-white/70">深色底用于强调终局结论与播报条。</p>
+              <p className="mt-1 text-xs leading-6 text-white/70">
+                深色底用于强调终局结论与播报条。
+              </p>
             </ComicCard>
           </div>
         </section>
@@ -229,9 +231,14 @@ export default function StyleguidePage() {
         </section>
 
         <section>
-          <SectionHeading index="07" title="DetectiveMascot" hint="SVG 吉祥物，可随尺寸缩放" />
+          <SectionHeading
+            index="07"
+            title="DetectiveMascot"
+            hint="同一角色的完整半身 / 头像裁切位图，可随尺寸缩放"
+          />
           <ComicCard className="flex flex-wrap items-center gap-6 p-5 sm:p-6">
             <DetectiveMascot className="w-28 shrink-0 -rotate-3" />
+            <DetectiveMascot variant="avatar" className="w-16 shrink-0" />
             <SpeechBubble tone="brand" tail="left">
               别急着转发，先让我看看出处！
             </SpeechBubble>
@@ -239,7 +246,11 @@ export default function StyleguidePage() {
         </section>
 
         <section>
-          <SectionHeading index="08" title="Badge · 来源等级" hint="官方 / 媒体 / 自媒体 / 营销号 / 未知" />
+          <SectionHeading
+            index="08"
+            title="Badge · 来源等级"
+            hint="官方 / 媒体 / 自媒体 / 营销号 / 未知"
+          />
           <ComicCard className="p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               {TIERS.map((tier) => (
@@ -258,7 +269,11 @@ export default function StyleguidePage() {
         </section>
 
         <section>
-          <SectionHeading index="09" title="VerdictBadge · 五档判决" hint="属实 / 部分属实 / 断章取义 / 无法证实 / 谣言" />
+          <SectionHeading
+            index="09"
+            title="VerdictBadge · 五档判决"
+            hint="属实 / 部分属实 / 断章取义 / 无法证实 / 谣言"
+          />
           <ComicCard className="space-y-4 p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               {VERDICTS.map((level) => (
@@ -283,7 +298,11 @@ export default function StyleguidePage() {
         </section>
 
         <section>
-          <SectionHeading index="11" title="Typewriter · 逐字打出" hint="减少动态偏好下直接全文显示" />
+          <SectionHeading
+            index="11"
+            title="Typewriter · 逐字打出"
+            hint="减少动态偏好下直接全文显示"
+          />
           <ComicCard tone="ink" className="p-5 sm:p-6">
             <p className="text-[11px] font-black tracking-widest text-white/60">办案播报</p>
             <p className="mt-2 text-lg leading-9 font-bold sm:text-xl">

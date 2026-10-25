@@ -27,7 +27,7 @@ export function CaseHeader({
   return (
     <header className="flex h-[64px] shrink-0 items-center gap-3 border-b-[3px] border-ink bg-brand px-4">
       <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft">
-        <DetectiveMascot className="h-11 w-11 -translate-y-1" />
+        <DetectiveMascot variant="avatar" className="h-11 w-11 -translate-y-1" />
       </span>
 
       <h1 className="shrink-0 text-xl font-black whitespace-nowrap text-white [text-shadow:2px_2px_0_var(--color-ink)]">

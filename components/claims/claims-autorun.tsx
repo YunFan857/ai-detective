@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useRef } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { ClaimMarkedText } from '@/components/claims/claim-marked-text';
@@ -29,20 +30,21 @@ function CostLine({ ctl }: { ctl: ClaimsAutorunController }) {
       <p className="text-xs font-bold text-muted">
         将扣 <span className="font-black text-coral">{cost}</span> 积分 · 余额 {credits.balance}
         {after >= 0 ? ` → ${after}` : ' · 余额不足'}
-        {credits.source === 'demo' ? ' · 开发演示余额' : ''}
+        {' · 本地演示积分'}
+        {credits.issue === 'unavailable' ? ' · 存储不可用，刷新会重置' : ''}
       </p>
     );
   }
   if (credits.status === 'loading') {
     return (
       <p className="text-xs font-bold text-muted">
-        将扣 <span className="font-black text-coral">{cost}</span> 积分 · 正在读取积分余额…
+        将扣 <span className="font-black text-coral">{cost}</span> 积分 · 正在读取本地余额…
       </p>
     );
   }
   return (
     <p className="text-xs font-bold text-muted">
-      将扣 <span className="font-black text-coral">{cost}</span> 积分 · 积分账户尚未接入
+      将扣 <span className="font-black text-coral">{cost}</span> 积分 · 积分状态不可用
     </p>
   );
 }
@@ -94,9 +96,7 @@ export function ClaimsAutorun({ ctl, onBackEdit }: ClaimsAutorunProps) {
   if (!preview) return null;
 
   const dashOffset =
-    phase === 'counting'
-      ? RING_LENGTH * (1 - snapshot.secondsLeft / AUTORUN_SECONDS)
-      : 0;
+    phase === 'counting' ? RING_LENGTH * (1 - snapshot.secondsLeft / AUTORUN_SECONDS) : 0;
   const ringLabel = phase === 'counting' ? snapshot.secondsLeft : AUTORUN_SECONDS;
   const length = snapshot.text.trim().length;
   const lengthInvalid = length < SCRIPTCHECK_MIN || length > SCRIPTCHECK_MAX;
@@ -199,7 +199,9 @@ export function ClaimsAutorun({ ctl, onBackEdit }: ClaimsAutorunProps) {
                     strokeLinecap="round"
                     strokeDasharray={RING_LENGTH}
                     strokeDashoffset={starting ? 0 : dashOffset}
-                    className={reduced ? '' : 'transition-[stroke-dashoffset] duration-1000 ease-linear'}
+                    className={
+                      reduced ? '' : 'transition-[stroke-dashoffset] duration-1000 ease-linear'
+                    }
                   />
                 </svg>
                 <span className="absolute inset-0 grid place-items-center text-lg font-black text-ink">
@@ -248,7 +250,7 @@ export function ClaimsAutorun({ ctl, onBackEdit }: ClaimsAutorunProps) {
 
           {phase === 'cancelled-editable' ? (
             <div className="flex flex-wrap items-center gap-3">
-              <DetectiveMascot className="h-12 w-12 shrink-0" aria-hidden />
+              <DetectiveMascot variant="avatar" className="h-12 w-12 shrink-0" aria-hidden />
               <div className="min-w-0 flex-1">
                 {snapshot.manualReason === 'cancelled' ? (
                   <p className="text-sm leading-6 font-black text-ink">
@@ -264,13 +266,20 @@ export function ClaimsAutorun({ ctl, onBackEdit }: ClaimsAutorunProps) {
                   </p>
                 ) : snapshot.manualReason === 'no-account' ? (
                   <p className="text-sm leading-6 font-black text-ink">
-                    积分账户尚未接入，不会自动开查，也不会扣积分。
+                    本地积分状态不可用，不会自动开查，也不会扣积分。
                     <br />
                     确认后可手动开始查证。
                   </p>
                 ) : (
                   <p className="text-sm leading-6 font-black text-coral">
                     积分不足，不会开查，也未扣积分。
+                    <br />
+                    <Link
+                      href="/credits"
+                      className="underline decoration-dotted underline-offset-2"
+                    >
+                      去积分中心签到或模拟充值 →
+                    </Link>
                   </p>
                 )}
                 <CostLine ctl={ctl} />
@@ -288,11 +297,9 @@ export function ClaimsAutorun({ ctl, onBackEdit }: ClaimsAutorunProps) {
 
           {stale ? (
             <div className="flex flex-wrap items-center gap-3">
-              <DetectiveMascot className="h-12 w-12 shrink-0" aria-hidden />
+              <DetectiveMascot variant="avatar" className="h-12 w-12 shrink-0" aria-hidden />
               <div className="min-w-0 flex-1">
-                <p className="text-sm leading-6 font-black text-coral">
-                  文案已修改，需重新体检。
-                </p>
+                <p className="text-sm leading-6 font-black text-coral">文案已修改，需重新体检。</p>
                 <p className="text-[11px] font-bold text-muted">
                   旧体检结果对应旧版本，不能用于查证。重新免费体检不扣积分，完成后才会按新结果分流。
                 </p>
@@ -310,7 +317,12 @@ export function ClaimsAutorun({ ctl, onBackEdit }: ClaimsAutorunProps) {
 
           {phase === 'error' ? (
             <div className="flex flex-wrap items-center gap-3">
-              <DetectiveMascot className="h-12 w-12 shrink-0" mood="yawn" aria-hidden />
+              <DetectiveMascot
+                variant="avatar"
+                className="h-12 w-12 shrink-0"
+                mood="yawn"
+                aria-hidden
+              />
               <div className="min-w-0 flex-1">
                 <p role="alert" className="text-sm leading-6 font-black text-coral">
                   {snapshot.errorMessage ?? '没能开始查证，本次未扣积分。'}
@@ -336,7 +348,6 @@ export function ClaimsAutorun({ ctl, onBackEdit }: ClaimsAutorunProps) {
           </div>
         ) : null}
       </section>
-
     </div>
   );
 }

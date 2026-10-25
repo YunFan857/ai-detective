@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { motion, useReducedMotion } from 'framer-motion';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { LinkIcon } from '@/components/ui/icons';
+import { billingSettlementText } from '@/lib/credits-format';
 import { DIRECTION_LABELS, sourceSiteLabel, verdictLabel } from '@/lib/labels';
 import { STEPS, stepOfTier, type StepId } from '@/lib/steps';
 import type { InvestigationState } from '@/lib/use-investigation';
@@ -20,6 +21,8 @@ export type ProgressFeedProps = {
   sourceImage?: string;
   state: InvestigationState;
   reveal: StepRevealResult;
+  /** 本地积分模式：charged=已预占；demo=演示不扣；unconfirmed=未经首页预占。 */
+  creditsMode: 'charged' | 'demo' | 'unconfirmed';
 };
 
 const STEP_INDEX = ['①', '②', '③', '④'] as const;
@@ -157,6 +160,7 @@ export function ProgressFeed({
   sourceImage,
   state,
   reveal,
+  creditsMode,
 }: ProgressFeedProps) {
   const reduceMotion = useReducedMotion();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -213,7 +217,30 @@ export function ProgressFeed({
             {sourceTitle}
           </p>
         ) : null}
+        <p
+          className={clsx(
+            'mt-1.5 rounded border px-1.5 py-0.5 text-[9px] leading-4 font-black',
+            creditsMode === 'charged'
+              ? 'border-brand bg-brand-soft text-brand-dark'
+              : creditsMode === 'demo'
+                ? 'border-ink/20 bg-gray-soft text-muted'
+                : 'border-orange bg-orange-soft text-orange',
+          )}
+        >
+          {creditsMode === 'charged'
+            ? '本地演示积分 · 结案按 billing 扣减 / 退回'
+            : creditsMode === 'demo'
+              ? '演示卷宗 · 演示不扣积分'
+              : '未经首页积分预占 · 本次不扣本地积分'}
+        </p>
       </div>
+
+      {creditsMode === 'charged' && state.status === 'done' && state.billing ? (
+        <div className="mx-3 mt-2 shrink-0 rounded-lg border-2 border-brand bg-brand-soft px-2.5 py-1.5 text-[10px] leading-4 font-bold text-ink">
+          <p className="font-black text-brand-dark">积分结算 · 本地演示</p>
+          <p>{billingSettlementText(state.billing)}</p>
+        </div>
+      ) : null}
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         {STEPS.map((step) => {
@@ -273,7 +300,7 @@ export function ProgressFeed({
                       className="flex items-start gap-1.5"
                     >
                       <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft">
-                        <DetectiveMascot className="h-7 w-7 -translate-y-0.5" />
+                        <DetectiveMascot variant="avatar" className="h-7 w-7 -translate-y-0.5" />
                       </span>
 
                       <div

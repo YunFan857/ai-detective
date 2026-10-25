@@ -19,6 +19,7 @@ import {
   selectAllUpToLimit,
   toggleClaimId,
 } from '@/lib/claims-selection';
+import { releaseCredits, reserveCredits } from '@/lib/credits-store';
 import { ClaimsPreviewSchema, type ClaimsPreview } from '@/types/case';
 
 /** 预检是一次性 JSON 请求，超时后明确失败，不靠轮询或假进度。 */
@@ -81,7 +82,8 @@ function httpFailure(status: number, serverMessage?: string): ClaimsFailure {
   if (status >= 500) {
     return {
       title: '分析服务暂时不可用',
-      message: '后端已收到请求，但上游模型这次没有给出结果（偶发，通常重试一次即可恢复）。文案已保留。',
+      message:
+        '后端已收到请求，但上游模型这次没有给出结果（偶发，通常重试一次即可恢复）。文案已保留。',
       detail: `HTTP ${status}${serverMessage ? ` · ${serverMessage}` : ''}`,
     };
   }
@@ -362,17 +364,37 @@ export function useClaimsCheck(): ClaimsCheckController {
     confirmingRef.current = true;
     setConfirming(true);
 
+    const points = selectedIds.length * preview.pricePerClaim;
+    const reservation = reserveCredits({
+      points,
+      flow: 'scriptcheck',
+      note: `文案体检 · ${selectedIds.length} 个疑点 × ${preview.pricePerClaim} 积分`,
+    });
+
+    if (!reservation.ok) {
+      confirmingRef.current = false;
+      setConfirming(false);
+      setNotice(
+        reservation.reason === 'insufficient'
+          ? `${reservation.message} 本次没有发起查证，也没有扣积分。`
+          : reservation.message,
+      );
+      return;
+    }
+
     const saved = writeClaimsHandoff({
       previewId: preview.previewId,
       input: preview.input,
       selectedClaimIds: selectedIds,
       pricePerClaim: preview.pricePerClaim,
+      transactionId: reservation.transactionId,
     });
 
     if (!saved) {
+      releaseCredits(reservation.transactionId, '疑点交接失败，预占积分已退回');
       confirmingRef.current = false;
       setConfirming(false);
-      setNotice('浏览器会话存储不可用，无法交接疑点，请刷新后重试。');
+      setNotice('浏览器会话存储不可用，无法交接疑点，预占积分已退回。');
       return;
     }
 

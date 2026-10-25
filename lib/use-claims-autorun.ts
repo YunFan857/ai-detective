@@ -19,6 +19,7 @@ import {
 } from '@/lib/claims-autorun-flow';
 import { writeClaimsHandoff } from '@/lib/claims-intake';
 import { useCredits, type CreditsView } from '@/lib/credits';
+import { releaseCredits, reserveCredits } from '@/lib/credits-store';
 import type { ClaimsCheckController } from '@/lib/use-claims-check';
 import type { ClaimsPreview } from '@/types/case';
 
@@ -129,13 +130,26 @@ export function useClaimsAutorun(check: ClaimsCheckController): ClaimsAutorunCon
       begin: (payload: StartPayload) => {
         const current = previewRef.current;
         if (!current || current.previewId !== payload.previewId) return false;
+
+        const points = payload.claimIds.length * payload.pricePerClaim;
+        const reservation = reserveCredits({
+          points,
+          flow: 'scriptcheck',
+          note: `文案体检自动开查 · ${payload.claimIds.length} 个疑点 × ${payload.pricePerClaim} 积分`,
+        });
+        if (!reservation.ok) return false;
+
         const saved = writeClaimsHandoff({
           previewId: current.previewId,
           input: current.input,
           selectedClaimIds: payload.claimIds,
           pricePerClaim: payload.pricePerClaim,
+          transactionId: reservation.transactionId,
         });
-        if (!saved) return false;
+        if (!saved) {
+          releaseCredits(reservation.transactionId, '疑点交接失败，预占积分已退回');
+          return false;
+        }
         // 与 ⑦ 共用同一个办案页入口：/case 读取交接后显式携带 selectedClaimIds 开查。
         router.push('/case?flow=scriptcheck');
         return true;

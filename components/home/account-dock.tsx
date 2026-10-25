@@ -1,18 +1,21 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, Gift, Settings, Wallet, X } from 'lucide-react';
+import { DetectiveMascot } from '@/components/ui/detective-mascot';
+import { useCreditAccount } from '@/lib/credits';
+import { checkInCredits } from '@/lib/credits-store';
+import { CHECKIN_POINTS, CREDITS_PER_CLAIM } from '@/lib/credits-policy';
 
-/** 演示账号：没有登录与积分后台，签到和余额只在本地面板里变化。 */
-const INITIAL_POINTS = 120;
-const CHECKIN_POINTS = 10;
-
+/** 演示账号：没有登录与积分后台，余额与签到来自同一个本地积分账本。 */
 export function AccountDock() {
   const [open, setOpen] = useState(false);
-  const [checkedIn, setCheckedIn] = useState(false);
-  const [points, setPoints] = useState(INITIAL_POINTS);
   const [notice, setNotice] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const account = useCreditAccount();
+  const loading = account.status === 'loading';
+  const claimCount = Math.floor(account.balance / CREDITS_PER_CLAIM);
 
   useEffect(() => {
     if (!open) return;
@@ -33,9 +36,9 @@ export function AccountDock() {
   }, [open]);
 
   function handleCheckIn() {
-    if (checkedIn) return;
-    setCheckedIn(true);
-    setPoints((value) => value + CHECKIN_POINTS);
+    if (account.checkedInToday) return;
+    const result = checkInCredits();
+    setNotice(result.message);
   }
 
   return (
@@ -49,7 +52,7 @@ export function AccountDock() {
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2.5">
               <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft">
-                <img src="/images/detective-logo.png" alt="" className="h-9 w-9 object-contain" />
+                <DetectiveMascot variant="avatar" className="h-10 w-10" />
               </span>
               <div>
                 <p className="flex items-center gap-1.5 text-sm font-black">
@@ -74,36 +77,49 @@ export function AccountDock() {
           <div className="mt-3 rounded-xl border-2 border-ink bg-beige px-3 py-2.5">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="text-[11px] text-muted">积分余额</p>
+                <p className="text-[11px] text-muted">积分余额（本地演示）</p>
                 <p className="text-2xl leading-tight font-black">
-                  {points}
+                  {loading ? '—' : account.balance}
                   <span className="ml-1 text-xs font-bold text-muted">积分</span>
                 </p>
+                <p className="mt-0.5 text-[10px] font-bold text-muted">
+                  约可查 {claimCount} 个疑点 · 赠送 {account.giftBalance} · 模拟充值{' '}
+                  {account.rechargeBalance}
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setNotice('积分充值功能开发中，敬请期待')}
-                className="flex items-center gap-1 rounded-full border-2 border-ink bg-brand px-3 py-1 text-xs font-black text-white shadow-ink-sm transition-transform hover:-translate-y-0.5"
+              <Link
+                href="/credits"
+                className="flex shrink-0 items-center gap-1 rounded-full border-2 border-ink bg-brand px-3 py-1 text-xs font-black text-white shadow-ink-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark"
               >
-                <Wallet className="h-3.5 w-3.5" />
+                <Wallet className="h-3.5 w-3.5" aria-hidden />
                 积分充值
-              </button>
+              </Link>
             </div>
+            {account.issue ? (
+              <p role="alert" className="mt-2 text-[10px] font-bold text-coral">
+                {account.issue === 'corrupt'
+                  ? '本地积分数据已损坏，已恢复为演示初始状态。'
+                  : '浏览器存储不可用，积分刷新后会重置。'}
+              </p>
+            ) : null}
           </div>
 
           <div className="mt-2.5 flex items-center justify-between gap-3 rounded-xl border-2 border-ink bg-card px-3 py-2.5">
-            <p className="text-xs font-bold">每日签到领取 10 积分</p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold">每日签到领取 {CHECKIN_POINTS} 积分</p>
+              <p className="mt-0.5 text-[10px] font-bold text-muted">按北京时间每天一次</p>
+            </div>
             <button
               type="button"
-              disabled={checkedIn}
+              disabled={loading || account.checkedInToday}
               onClick={handleCheckIn}
-              className={`shrink-0 rounded-full border-2 border-ink px-3 py-1 text-xs font-black shadow-ink-sm transition-transform ${
-                checkedIn
+              className={`shrink-0 rounded-full border-2 border-ink px-3 py-1 text-xs font-black shadow-ink-sm transition-transform focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark ${
+                account.checkedInToday
                   ? 'cursor-default bg-gray-soft text-muted shadow-none'
                   : 'bg-coral text-white hover:-translate-y-0.5'
               }`}
             >
-              {checkedIn ? '已签到 ✓' : '签到'}
+              {account.checkedInToday ? '已签到 ✓' : '签到'}
             </button>
           </div>
 
@@ -148,11 +164,7 @@ export function AccountDock() {
         aria-label={open ? '收起账号面板' : '打开账号面板'}
         className="grid h-12 w-12 place-items-center rounded-full border-[3px] border-ink bg-brand-soft shadow-ink transition-transform hover:-translate-y-0.5 active:translate-y-0 sm:h-14 sm:w-14"
       >
-        <img
-          src="/images/detective-logo.png"
-          alt=""
-          className="h-9 w-9 object-contain sm:h-11 sm:w-11"
-        />
+        <DetectiveMascot variant="avatar" className="h-9 w-9 sm:h-11 sm:w-11" />
       </button>
     </div>
   );

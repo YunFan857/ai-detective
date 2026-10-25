@@ -1,12 +1,5 @@
-import type {
-  Claim,
-  ClaimCategory,
-  Source,
-  Stance,
-  Stage,
-  Tier,
-  VerdictLevel,
-} from '@/types/case';
+import type { Claim, ClaimCategory, Source, Stance, Stage, Tier, VerdictLevel } from '@/types/case';
+import type { CreditEntry } from './credits-store';
 
 /**
  * 枚举 → 中文与配色的唯一映射。
@@ -318,4 +311,18 @@ export function claimKindLabel(kind: Claim['kind']): string {
 
 export function claimCategoryLabel(category: ClaimCategory): string {
   return CLAIM_CATEGORY_LABELS[category];
+}
+
+/** 积分流水类型：本地演示账本的中文文案。 */
+export const CREDIT_ENTRY_LABELS: Record<CreditEntry['type'], string> = {
+  init: '演示赠送',
+  checkin: '每日签到',
+  recharge: '模拟充值',
+  spend: '查证扣除',
+  refund: '积分退回',
+  expire: '赠送到期',
+};
+
+export function creditEntryLabel(type: CreditEntry['type']): string {
+  return CREDIT_ENTRY_LABELS[type];
 }

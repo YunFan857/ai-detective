@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ClaimMarkedText } from '@/components/claims/claim-marked-text';
@@ -7,6 +8,7 @@ import { ComicButton } from '@/components/ui/comic-button';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { MAX_SELECTED_CLAIMS } from '@/lib/claims-intake';
 import { countByRisk, sortClaimsForPick } from '@/lib/claims-selection';
+import { useCredits } from '@/lib/credits';
 import { buildClaimMarks } from '@/lib/claims-span';
 import { claimCategoryLabel, RISK_META } from '@/lib/labels';
 import type { ClaimsPreview } from '@/types/case';
@@ -53,21 +55,22 @@ export function ClaimsPick({
   const claims = preview.claims;
   const claimsById = useMemo(() => new Map(claims.map((claim) => [claim.id, claim])), [claims]);
   const sorted = useMemo(() => sortClaimsForPick(claims), [claims]);
-  const layout = useMemo(
-    () => buildClaimMarks(preview.input, claims),
-    [preview.input, claims],
-  );
+  const layout = useMemo(() => buildClaimMarks(preview.input, claims), [preview.input, claims]);
   const counts = useMemo(() => countByRisk(claims), [claims]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const markRefs = useRef<Record<string, HTMLSpanElement | null>>({});
   const cardRefs = useRef<Record<string, HTMLLIElement | null>>({});
 
-  const activeClaim =
-    (activeId ? claimsById.get(activeId) : undefined) ?? sorted[0]?.claim ?? null;
+  const activeClaim = (activeId ? claimsById.get(activeId) : undefined) ?? sorted[0]?.claim ?? null;
 
   const totalPrice = preview.pricePerClaim * selectedIds.length;
   const selectedCount = selectedIds.length;
+  const credits = useCredits();
+  const balance = credits.status === 'ready' ? credits.balance : null;
+  const creditLoading = credits.status === 'loading';
+  const insufficient = balance !== null && balance < totalPrice;
+  const after = balance === null ? null : balance - totalPrice;
 
   function scrollTo(element: HTMLElement | null): void {
     if (!element) return;
@@ -104,9 +107,7 @@ export function ClaimsPick({
                 <span aria-hidden>📄</span>
                 原文 · 发现 {claims.length} 个疑点
               </h1>
-              <span className="ml-auto text-[11px] font-bold text-muted">
-                点框框 = 勾选 / 取消
-              </span>
+              <span className="ml-auto text-[11px] font-bold text-muted">点框框 = 勾选 / 取消</span>
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-black text-muted">
@@ -353,9 +354,7 @@ export function ClaimsPick({
                           </p>
                         ) : null}
 
-                        <p className="mt-1 text-[10px] font-black text-muted">
-                          AI 初判 · 待查证
-                        </p>
+                        <p className="mt-1 text-[10px] font-black text-muted">AI 初判 · 待查证</p>
                       </label>
 
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -392,14 +391,19 @@ export function ClaimsPick({
       <div className="fixed inset-x-0 bottom-0 z-40 border-t-[3px] border-ink bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
         <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-2 px-4 py-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft">
-            <DetectiveMascot className="h-10 w-10 -translate-y-1" />
+            <DetectiveMascot variant="avatar" className="h-10 w-10 -translate-y-1" />
           </span>
           <div className="min-w-0">
             <p className="text-sm font-black text-ink">
               已选 {selectedCount} 个 · 将扣 {totalPrice} 积分
             </p>
             <p className="text-[10px] leading-4 font-bold text-muted">
-              单价 {preview.pricePerClaim} 积分 / 个 · 演示模式 · 暂未启用积分账户，未真实扣款
+              单价 {preview.pricePerClaim} 积分 / 个 · 本地演示积分
+              {balance !== null && after !== null
+                ? ` · 余额 ${balance}${after >= 0 ? ` → ${after}` : ' · 余额不足'}`
+                : creditLoading
+                  ? ' · 正在读取本地余额…'
+                  : ''}
             </p>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -409,16 +413,24 @@ export function ClaimsPick({
             <ComicButton
               variant="brand"
               onClick={onConfirm}
-              disabled={selectedCount === 0 || confirming}
+              disabled={selectedCount === 0 || confirming || creditLoading || insufficient}
               aria-busy={confirming}
+              title={insufficient ? '积分不足，请先到积分中心签到或模拟充值' : undefined}
             >
-              {confirming ? '正在立案…' : '🕵️ 开始查证'}
+              {confirming ? '正在立案…' : insufficient ? '积分不足' : '🕵️ 开始查证'}
             </ComicButton>
           </div>
         </div>
         {selectedCount === 0 ? (
           <p className="mx-auto w-full max-w-[1440px] px-4 pb-2 text-[10px] font-bold text-coral">
             至少勾选 1 个疑点才能开始；清空后不会自动扣费。
+          </p>
+        ) : insufficient ? (
+          <p className="mx-auto w-full max-w-[1440px] px-4 pb-2 text-[10px] font-bold text-coral">
+            积分不足，还差 {totalPrice - (balance ?? 0)} 积分，本次不会发起查证。
+            <Link href="/credits" className="ml-1 underline decoration-dotted underline-offset-2">
+              去积分中心 →
+            </Link>
           </p>
         ) : null}
       </div>
