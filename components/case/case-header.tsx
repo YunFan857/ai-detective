@@ -1,5 +1,6 @@
+import Link from 'next/link';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
-import { LinkIcon } from '@/components/ui/icons';
+import { HomeIcon, LinkIcon } from '@/components/ui/icons';
 import { StatsBar } from '@/components/stats-bar';
 import { stepById, type StepId } from '@/lib/steps';
 import type { InvestigationState } from '@/lib/use-investigation';
@@ -26,9 +27,23 @@ export function CaseHeader({
 
   return (
     <header className="flex h-[64px] shrink-0 items-center gap-3 border-b-[3px] border-ink bg-brand px-4">
-      <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft">
+      <Link
+        href="/"
+        aria-label="返回首页"
+        title="返回首页"
+        className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-ink bg-brand-soft transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-card"
+      >
         <DetectiveMascot variant="avatar" className="h-11 w-11 -translate-y-1" />
-      </span>
+      </Link>
+
+      <Link
+        href="/"
+        aria-label="返回首页"
+        className="flex shrink-0 items-center gap-1.5 rounded-xl border-2 border-ink bg-card px-2.5 py-1.5 text-xs font-black whitespace-nowrap text-ink shadow-ink-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark"
+      >
+        <HomeIcon className="h-3.5 w-3.5" />
+        首页
+      </Link>
 
       <h1 className="shrink-0 text-xl font-black whitespace-nowrap text-white [text-shadow:2px_2px_0_var(--color-ink)]">
         卷宗 <span className="tracking-wider">#{caseId ?? '------'}</span>

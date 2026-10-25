@@ -100,6 +100,7 @@ type MoreNodeData = {
 
 type GraphNodeData = ClaimNodeData | SourceNodeData | GroupNodeData | MoreNodeData;
 type GraphNode = Node<GraphNodeData, 'evidence'>;
+type GraphNodeHandle = NonNullable<GraphNode['handles']>[number];
 
 type GraphEdgeData = {
   step: StepId;
@@ -141,6 +142,23 @@ const COL_GAP = 24;
 const ROW_GAP = 20;
 /** 单步最多渲染 8 张卡片（4 行），超出部分折叠成「其余来源」卡片。 */
 const MAX_STEP_CARDS = 8;
+
+/**
+ * 节点尺寸与连线锚点显式声明：节点对象每次渲染都会重建，
+ * React Flow 会因此丢掉 measurement，导致节点 visibility:hidden、连线也拿不到 handle。
+ * 这里给出固定的 initialWidth / initialHeight 与 handles，保证首帧即可见、可连线。
+ */
+const CLAIM_SIZE = { width: 236, height: 104 };
+const SOURCE_SIZE = { width: CARD_WIDTH, height: 92 };
+
+const CLAIM_HANDLES = [
+  { type: 'source', position: Position.Right, x: CLAIM_SIZE.width, y: CLAIM_SIZE.height / 2 },
+] satisfies GraphNodeHandle[];
+
+const SOURCE_HANDLES = [
+  { type: 'target', position: Position.Left, x: 0, y: SOURCE_SIZE.height / 2 },
+  { type: 'source', position: Position.Right, x: SOURCE_SIZE.width, y: SOURCE_SIZE.height / 2 },
+] satisfies GraphNodeHandle[];
 
 /** 每个步骤的固定区域：断言在左中，官方右上，媒体中下，自媒体右中。 */
 const REGIONS: Record<StepId, { x: number; y: number; columns: number }> = {
@@ -1024,6 +1042,9 @@ function EvidenceGraphInner({
         position,
         draggable: false,
         selectable: false,
+        initialWidth: CLAIM_SIZE.width,
+        initialHeight: CLAIM_SIZE.height,
+        handles: CLAIM_HANDLES,
         ariaLabel: `待核验的断言：${claim?.text ?? ''}`,
         data: {
           kind: 'claim',
@@ -1043,6 +1064,9 @@ function EvidenceGraphInner({
         position,
         draggable: false,
         selectable: false,
+        initialWidth: SOURCE_SIZE.width,
+        initialHeight: SOURCE_SIZE.height,
+        handles: SOURCE_HANDLES,
         ariaLabel: `来源：${sourceSiteLabel(entity.source)}`,
         data: {
           kind: 'source',
@@ -1066,6 +1090,9 @@ function EvidenceGraphInner({
         position,
         draggable: false,
         selectable: false,
+        initialWidth: SOURCE_SIZE.width,
+        initialHeight: SOURCE_SIZE.height,
+        handles: SOURCE_HANDLES,
         ariaLabel: `其余 ${entity.sourceIds.length} 条来源`,
         data: {
           kind: 'more',
@@ -1085,6 +1112,9 @@ function EvidenceGraphInner({
       position,
       draggable: false,
       selectable: false,
+      initialWidth: SOURCE_SIZE.width,
+      initialHeight: SOURCE_SIZE.height,
+      handles: SOURCE_HANDLES,
       ariaLabel: `同源转载 ${entity.count} 条`,
       data: {
         kind: 'group',

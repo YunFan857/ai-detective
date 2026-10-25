@@ -83,6 +83,17 @@ export function FolderIcon(props: IconProps) {
   );
 }
 
+/** 返回首页 */
+export function HomeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M3.5 10.5 12 3.5l8.5 7" />
+      <path d="M5.5 9.5V20h13V9.5" />
+      <path d="M10 20v-5h4v5" />
+    </svg>
+  );
+}
+
 /** 铅笔小提示 */
 export function ScribbleIcon(props: IconProps) {
   return (
