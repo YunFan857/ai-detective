@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation';
 import {
   CLAIMS_EDIT_HOME,
   MAX_SELECTED_CLAIMS,
+  SCRIPTCHECK_MAX,
+  SCRIPTCHECK_MIN,
   readClaimsDraft,
+  writeClaimsDraft,
   writeClaimsHandoff,
   type ClaimsDraft,
 } from '@/lib/claims-intake';
@@ -122,6 +125,13 @@ export type ClaimsCheckController = {
   confirm: () => void;
   retry: () => void;
   backToEdit: () => void;
+  /** 草稿的稳定 id（createdAt）；每次主动提交 / 重新体检都会换新。 */
+  draftId: string | null;
+  /**
+   * ⑦b 修改文案后主动「重新免费体检」：写入新草稿并重新请求预检。
+   * 返回 null 表示已发起；否则是给用户看的中文原因，不会发起请求。
+   */
+  recheck: (text: string) => string | null;
 };
 
 /**
@@ -377,7 +387,33 @@ export function useClaimsCheck(): ClaimsCheckController {
     router.push(CLAIMS_EDIT_HOME);
   }, [router]);
 
+  const recheck = useCallback((text: string): string | null => {
+    // 与首页提交一致：送检版本是 trim 后的文本，预览的 span 也对应这一版。
+    const length = text.trim().length;
+    if (length < SCRIPTCHECK_MIN || length > SCRIPTCHECK_MAX) {
+      return `文案体检支持 ${SCRIPTCHECK_MIN}–${SCRIPTCHECK_MAX} 字，当前 ${length} 字。`;
+    }
+    if (!writeClaimsDraft(text)) {
+      return '浏览器会话存储不可用，无法重新体检，请刷新页面后重试。';
+    }
+    const next = readClaimsDraft();
+    if (!next) return '没能保存修改后的文案，请重试。';
+
+    setDraft(next);
+    // 与旧预览同批清空：避免旧预览对着新草稿多渲染一帧。
+    setPreview(null);
+    setSelectedIds([]);
+    setFailure(null);
+    setNotice(null);
+    setPhase('loading');
+    // 文本可能与上一版 trim 后相同（只改了空白）：显式递增，保证一定重新请求。
+    setRetryTick((value) => value + 1);
+    return null;
+  }, []);
+
   return {
+    draftId: draft ? String(draft.createdAt) : null,
+    recheck,
     phase,
     draft,
     preview,

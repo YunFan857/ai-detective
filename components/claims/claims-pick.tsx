@@ -2,11 +2,12 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
+import { ClaimMarkedText } from '@/components/claims/claim-marked-text';
 import { ComicButton } from '@/components/ui/comic-button';
 import { DetectiveMascot } from '@/components/ui/detective-mascot';
 import { MAX_SELECTED_CLAIMS } from '@/lib/claims-intake';
 import { countByRisk, sortClaimsForPick } from '@/lib/claims-selection';
-import { buildClaimMarks, type ClaimMark } from '@/lib/claims-span';
+import { buildClaimMarks } from '@/lib/claims-span';
 import { claimCategoryLabel, RISK_META } from '@/lib/labels';
 import type { ClaimsPreview } from '@/types/case';
 
@@ -23,11 +24,9 @@ export type ClaimsPickProps = {
   onClear: () => void;
   onConfirm: () => void;
   onBackEdit: () => void;
+  /** 本次回退为手动确认的原因说明（如 autoRun 与疑点数量不一致）。 */
+  manualNote?: string;
 };
-
-type TextPiece =
-  | { kind: 'text'; key: string; text: string }
-  | { kind: 'mark'; key: string; mark: ClaimMark };
 
 const RISK_ORDER = ['high', 'medium', 'low'] as const;
 
@@ -48,6 +47,7 @@ export function ClaimsPick({
   onClear,
   onConfirm,
   onBackEdit,
+  manualNote,
 }: ClaimsPickProps) {
   const reduced = useReducedMotion();
   const claims = preview.claims;
@@ -65,26 +65,6 @@ export function ClaimsPick({
 
   const activeClaim =
     (activeId ? claimsById.get(activeId) : undefined) ?? sorted[0]?.claim ?? null;
-
-  const pieces = useMemo<TextPiece[]>(() => {
-    const list: TextPiece[] = [];
-    let cursor = 0;
-    layout.marks.forEach((mark, index) => {
-      if (mark.start > cursor) {
-        list.push({
-          kind: 'text',
-          key: `text-${index}-${cursor}`,
-          text: preview.input.slice(cursor, mark.start),
-        });
-      }
-      list.push({ kind: 'mark', key: mark.key, mark });
-      cursor = mark.end;
-    });
-    if (cursor < preview.input.length) {
-      list.push({ kind: 'text', key: 'text-tail', text: preview.input.slice(cursor) });
-    }
-    return list;
-  }, [layout.marks, preview.input]);
 
   const totalPrice = preview.pricePerClaim * selectedIds.length;
   const selectedCount = selectedIds.length;
@@ -109,11 +89,6 @@ export function ClaimsPick({
     const element = cardRefs.current[claimId];
     scrollTo(element);
     element?.focus({ preventScroll: true });
-  }
-
-  function handleMarkClick(mark: ClaimMark): void {
-    setActiveId(mark.claimIds[0] ?? null);
-    onToggleMany(mark.claimIds);
   }
 
   return (
@@ -153,68 +128,18 @@ export function ClaimsPick({
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <p className="text-[15px] leading-8 break-words whitespace-pre-wrap text-ink">
-              {pieces.map((piece) => {
-                if (piece.kind === 'text') return <span key={piece.key}>{piece.text}</span>;
-
-                const mark = piece.mark;
-                const related = mark.claimIds
-                  .map((id) => claimsById.get(id))
-                  .filter((claim): claim is NonNullable<typeof claim> => Boolean(claim));
-                const highest = related.reduce<(typeof related)[number] | undefined>(
-                  (current, claim) => {
-                    const rank = (value: string | undefined): number =>
-                      value === 'high' ? 0 : value === 'medium' ? 1 : 2;
-                    if (!current) return claim;
-                    return rank(claim.riskLevel) < rank(current.riskLevel) ? claim : current;
-                  },
-                  undefined,
-                );
-                const risk = RISK_META[highest?.riskLevel ?? 'low'];
-                const selectedFlags = mark.claimIds.map((id) => selectedIds.includes(id));
-                const allSelected = selectedFlags.every(Boolean);
-                const someSelected = selectedFlags.some(Boolean);
-                const isActive = mark.claimIds.includes(activeId ?? '');
-
-                return (
-                  <span
-                    key={piece.key}
-                    ref={(element) => {
-                      markRefs.current[mark.key] = element;
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={allSelected}
-                    aria-label={`${related.map((claim) => claim.text).join('；')}。${risk.label}。AI 初判，待查证。${
-                      allSelected ? '点击取消勾选' : '点击勾选'
-                    }`}
-                    onClick={() => handleMarkClick(mark)}
-                    onKeyDown={(event) => {
-                      if (event.key !== 'Enter' && event.key !== ' ') return;
-                      event.preventDefault();
-                      handleMarkClick(mark);
-                    }}
-                    onMouseEnter={() => setActiveId(mark.claimIds[0] ?? null)}
-                    onFocus={() => setActiveId(mark.claimIds[0] ?? null)}
-                    className={`mx-0.5 inline cursor-pointer rounded-md px-0.5 py-px align-baseline transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark ${
-                      allSelected
-                        ? `border-2 border-dashed ${risk.border} ${risk.bg} ${risk.text}`
-                        : someSelected
-                          ? 'border-2 border-dashed border-ink/40 bg-gray-soft/70 text-ink'
-                          : 'border border-dashed border-gray/60 bg-transparent text-ink hover:border-ink/50'
-                    } ${isActive ? 'ring-2 ring-brand-dark/50 ring-offset-1' : ''}`}
-                  >
-                    {preview.input.slice(mark.start, mark.end)}
-                  </span>
-                );
-              })}
-            </p>
-
-            {layout.unlocatedClaims.length > 0 ? (
-              <p className="mt-3 rounded-lg border-2 border-dashed border-ink/20 bg-paper px-2.5 py-1.5 text-[11px] leading-4 font-bold text-muted">
-                {layout.unlocatedClaims.length} 个疑点暂无法定位原文，已在右侧保留卡片。
-              </p>
-            ) : null}
+            <ClaimMarkedText
+              input={preview.input}
+              claims={claims}
+              layout={layout}
+              selectedIds={selectedIds}
+              activeId={activeId}
+              onToggleMarks={onToggleMany}
+              onActiveChange={setActiveId}
+              registerMark={(key, element) => {
+                markRefs.current[key] = element;
+              }}
+            />
           </div>
 
           {activeClaim ? (
@@ -344,10 +269,8 @@ export function ClaimsPick({
                 `已选 ${selectedCount} / ${claims.length} 个；默认只勾选高风险，最多 ${MAX_SELECTED_CLAIMS} 个。`}
             </p>
 
-            {preview.autoRun ? (
-              <p className="mt-1 text-[10px] font-bold text-muted">
-                本次疑点较少，确认后手动开始，不会自动开查或自动扣费。
-              </p>
+            {manualNote ? (
+              <p className="mt-1 text-[10px] font-bold text-muted">{manualNote}</p>
             ) : null}
           </div>
 

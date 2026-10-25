@@ -63,9 +63,9 @@
 
 ## 五、暂未覆盖
 
-- 积分账户模块尚未存在：结算栏只展示估算与「暂未启用积分账户」，无余额、无不足拦截、无真实扣款。`billing` 事件已接入状态，等积分模块落地即可在此基础上结算。
+- 积分账户模块尚未存在：结算栏只展示估算与「暂未启用积分账户」，无余额、无不足拦截、无真实扣款。`billing` 事件已接入状态，等积分模块落地即可在此基础上结算。⑦b 在无真实账户时同样显示「积分账户尚未接入」，不启动自动开查，只保留手动入口。
 - 06 的「逐句扫描」不可实现：`extract-claims` 是一次性 JSON，前端不伪造进度，只保留明确标注的等待动效。
-- 07b 三秒自动运行按需求未实现，1–2 疑点走「手动确认后开始」。
+- 07b 已由「3 秒」改为「30 秒」，详见第八节。
 
 ## 六、需 A 配合
 
@@ -82,3 +82,32 @@
 - `components/claims/claims-top-bar.tsx`：顶栏 `bg-ink` → `bg-brand`（元宝绿），描边、阴影保持，文字/边框对比度同步调整。
 - `lib/use-claims-check.ts`：5xx 文案改为说明“上游模型偶发无结果，重试即可”。
 - 截图：`screenshots/opt-*.jpg`。
+
+## 八、⑦b 疑点 1–2 个 · 30 秒后自动开查
+
+### 已确定的行为
+
+- **⑦b 已改为 30 秒**：先完整展示费用提示与「取消 / 立即开始」，再逐秒倒计时 30 秒；原型图里的 3 秒全部作废。
+- **取消后保留原文、返回编辑**：取消只作废计时器与已排队回调，不查证、不扣积分；原文保持可编辑，免费预检结果与风险标记保留为只读参考。
+- **同一预览取消后不再自动倒计时**：按 `draftId + previewId` 记录取消标记（`sessionStorage`，zod 校验），rerender、切后台、路由返回、刷新都只进入手动确认，不静默恢复自动开查。
+- **未改文案可手动开查，改过文案必须重新免费体检**：手动开始复用原 `previewId` 与 `selectedClaimIds`，不重新预检、不再倒计时；文案任意变动（含标点、首尾空白，逐字比较、不 trim）立即进入 `stale`，只能「重新免费体检」，拿到新预览后才重新分流/倒计时。
+
+### 分流规则
+
+- 0 疑点 → 不查证、不倒计时，明确提示不扣积分。
+- 1–2 疑点且 `autoRun=true` → ⑦b 自动开查。
+- ≥3 疑点 → ⑦ 多疑点选择页（原有逻辑不变）。
+- `autoRun` 与疑点数量不一致、id 缺失/重复、非 `scriptcheck`/`text`、文案与预览不一致 → 回退 ⑦ 手动确认。
+
+### 接入方式（复用 ⑥⑦，不重写）
+
+- 复用 `useClaimsCheck` 的预览、`previewId`、`pricePerClaim`、积分/计费入口，以及 `ClaimMarkedText` 原文标记组件（⑦ 与 ⑦b 共用，不另写 span 渲染）。
+- 只新增分流与倒计时层：`lib/claims-autorun-flow.ts`（分流 + 会话标记）、`lib/claims-autorun-controller.ts`（纯 TS 状态机，注入时钟便于假时钟验证）、`lib/use-claims-autorun.ts`（React 接入）、`lib/credits.ts`（积分只读视图）、`components/claims/claims-autorun.tsx`（⑦b UI）、`components/claims/claim-marked-text.tsx`（共享标记）。
+- 到点、立即开始、取消后手动开始共用 `startOnce()`：先同步置锁 → 清计时器 → 校验文案版本 / `previewId` / 余额 / 疑点数量 → 只启动一次；启动请求仍是 `POST /api/investigate` `{ mode:<preview.mode>, inputType:<preview.inputType>, previewId, selectedClaimIds }`，后续沿用现有办案页 / SSE / 判决书。
+- 未改动 `app/api/`、`lib/pipeline/`、`types/`、`mock/`、`cache/`、`scripts/`。
+
+### 待配合
+
+- 需要积分账户接口（余额查询 + 扣费/退款口径）：当前 `lib/credits.ts` 默认 `unavailable`，⑦b 只显示「积分账户尚未接入」并保留手动入口，不会伪造余额；开发期可用 `?demoCredits=38` 或 `sessionStorage['claims:demo-credits']` 走演示余额，生产构建关闭。
+- 前端锁只保证本页面单次启动，**不等价于服务端幂等**；建议 `previewId + selectedClaimIds` 在服务端做幂等键，避免重复计费。
+- `POST /api/investigate` 的 404 `preview_not_found`（预览过期/缓存被清）前端提示重新体检，不自动重启倒计时；网络失败显示错误 + 手动重试。

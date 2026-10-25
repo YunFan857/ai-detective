@@ -1,72 +1,50 @@
-import type { SVGProps } from 'react';
+import type { ImgHTMLAttributes } from 'react';
 
-export type DetectiveMascotProps = SVGProps<SVGSVGElement> & {
-  /** yawn：闭眼张嘴打哈欠，用于「没有可核查的事实」的空状态。 */
+export type DetectiveMascotProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'alt'> & {
+  /** yawn：同一只小侦探，右上角飘 Zzz，用于「没有可核查的事实」「失败」等空状态。 */
   mood?: 'default' | 'yawn';
 };
 
 /**
- * 侦探社吉祥物。
- * default：使用新版 2D 小侦探 logo 位图（public/images/detective-logo.png，512×512 透明底）。
- * yawn：新图没有打哈欠表情，保留纯 SVG 绘制。
+ * 侦探社吉祥物：统一使用新版 2D 小侦探位图
+ * （public/images/detective-logo.png，512×512 透明底）。
+ * 不再保留旧的绿脸棕帽 SVG；yawn 态在同一张图上叠加 Zzz，不另绘形象。
  */
 export function DetectiveMascot({
   className,
   mood = 'default',
+  style,
   ...props
 }: DetectiveMascotProps) {
-  const yawning = mood === 'yawn';
+  const image = (
+    <img
+      src="/images/detective-logo.png"
+      alt=""
+      aria-hidden
+      draggable={false}
+      className={`aspect-square object-contain ${mood === 'yawn' ? 'h-full w-full' : (className ?? '')}`}
+      style={mood === 'yawn' ? undefined : style}
+      {...(mood === 'yawn' ? {} : props)}
+    />
+  );
 
-  if (!yawning) {
-    return (
-      <img
-        src="/images/detective-logo.png"
-        alt=""
-        aria-hidden
-        draggable={false}
-        className={`aspect-square object-contain ${className ?? ''}`}
-      />
-    );
-  }
+  if (mood !== 'yawn') return image;
 
   return (
-    <svg viewBox="0 0 140 150" fill="none" className={className} aria-hidden {...props}>
-      {/* 脸 */}
-      <circle cx="70" cy="100" r="40" fill="#43b862" stroke="#1c1c1c" strokeWidth="4" />
-
-      {/* 帽冠与帽檐，压住脸的顶部 */}
-      <path
-        d="M40 60C37 34 47 22 70 22C93 22 103 34 100 60Z"
-        fill="#855536"
-        stroke="#1c1c1c"
-        strokeWidth="4"
+    <span aria-hidden className={`relative inline-block aspect-square ${className ?? ''}`} style={style}>
+      {image}
+      <svg
+        viewBox="0 0 40 40"
+        fill="none"
+        className="absolute -top-[6%] -right-[8%] h-[34%] w-[34%]"
+        stroke="var(--color-ink)"
+        strokeWidth="3.5"
+        strokeLinecap="round"
         strokeLinejoin="round"
-      />
-      <path
-        d="M42 48C54 54 86 54 98 48L99 57C86 63 54 63 41 57Z"
-        fill="#33251a"
-        stroke="#1c1c1c"
-        strokeWidth="3"
-        strokeLinejoin="round"
-      />
-      <ellipse cx="70" cy="60" rx="46" ry="12" fill="#6f4529" stroke="#1c1c1c" strokeWidth="4" />
-
-      {/* 闭眼 */}
-      <path d="M46 98C52 91 60 91 66 98" stroke="#1c1c1c" strokeWidth="4" strokeLinecap="round" />
-      <path d="M76 98C82 91 90 91 96 98" stroke="#1c1c1c" strokeWidth="4" strokeLinecap="round" />
-
-      {/* 腮红 */}
-      <ellipse cx="41" cy="113" rx="7" ry="4" fill="#7fd39a" />
-      <ellipse cx="99" cy="113" rx="7" ry="4" fill="#7fd39a" />
-
-      {/* 张开的嘴 */}
-      <ellipse cx="70" cy="119" rx="10" ry="7" fill="#1c1c1c" stroke="#1c1c1c" strokeWidth="3" />
-
-      {/* 飘出的 Zzz */}
-      <g stroke="#1c1c1c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M106 28h9l-9 9h9" />
-        <path d="M120 13h6l-6 6h6" />
-      </g>
-    </svg>
+      >
+        <path d="M6 18h13l-13 13h13" />
+        <path d="M24 4h9l-9 9h9" />
+      </svg>
+    </span>
   );
 }

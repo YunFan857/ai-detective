@@ -1,17 +1,30 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { ClaimsAutorun } from '@/components/claims/claims-autorun';
 import { ClaimsPick } from '@/components/claims/claims-pick';
 import { ClaimsProgress } from '@/components/claims/claims-progress';
 import { ClaimsStateCard } from '@/components/claims/claims-state-card';
 import { ClaimsTopBar } from '@/components/claims/claims-top-bar';
+import { useClaimsAutorun } from '@/lib/use-claims-autorun';
 import { useClaimsCheck } from '@/lib/use-claims-check';
 
-/** /claims 的拼装层：请求与状态机都在 useClaimsCheck 里。 */
+/**
+ * Cache Components 会保留页面状态，二次提交新文案时旧草稿与旧预览不会重置。
+ * 用 bfcacheId 作 key：push / replace 新导航时重挂载并重新读取草稿，浏览器前进后退仍保留现场。
+ */
 export function ClaimsWorkspace() {
+  const { bfcacheId } = useRouter();
+  return <ClaimsWorkspaceContent key={bfcacheId} />;
+}
+
+/** /claims 的拼装层：请求与状态机都在 useClaimsCheck / useClaimsAutorun 里。 */
+function ClaimsWorkspaceContent() {
   const router = useRouter();
   const check = useClaimsCheck();
+  const autorun = useClaimsAutorun(check);
   const claims = check.preview?.claims ?? [];
+  const route = check.phase === 'ready' ? autorun.route : null;
 
   const badge =
     check.phase === 'ready'
@@ -68,7 +81,7 @@ export function ClaimsWorkspace() {
         />
       ) : null}
 
-      {check.phase === 'ready' && check.preview && claims.length === 0 ? (
+      {check.phase === 'ready' && check.preview && route === 'empty' ? (
         <ClaimsStateCard
           mood="yawn"
           eyebrow="体检完成 · 0 个疑点"
@@ -81,7 +94,11 @@ export function ClaimsWorkspace() {
         />
       ) : null}
 
-      {check.phase === 'ready' && check.preview && claims.length > 0 ? (
+      {check.phase === 'ready' && check.preview && route === 'autorun' ? (
+        <ClaimsAutorun ctl={autorun} onBackEdit={check.backToEdit} />
+      ) : null}
+
+      {check.phase === 'ready' && check.preview && route === 'pick' ? (
         <ClaimsPick
           preview={check.preview}
           selectedIds={check.selectedIds}
@@ -95,6 +112,11 @@ export function ClaimsWorkspace() {
           onClear={check.clear}
           onConfirm={check.confirm}
           onBackEdit={check.backToEdit}
+          manualNote={
+            autorun.pickReason === 'mismatch'
+              ? '本次疑点较少，但自动开查条件未满足，已回退为手动确认，不会自动开查或自动扣费。'
+              : undefined
+          }
         />
       ) : null}
     </div>
